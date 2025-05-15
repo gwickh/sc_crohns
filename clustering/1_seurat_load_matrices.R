@@ -29,12 +29,11 @@ sample_names <- basename(dirname(dirname(matrix_paths)))
 # Load matrices into Seurat object
 seurat_list <- list()
 
-# Loop through each matrix path and corresponding sample name
+# Loop through matrix path and sample name to load count matrix from .h5 file 
 for (i in seq_along(matrix_paths)) {
   path <- matrix_paths[i]
   sample <- sample_names[i]
-  
-  # Load the count matrix from the .h5 file
+   
   counts <- Read10X_h5(path)
   
   # Extract gene expression data
