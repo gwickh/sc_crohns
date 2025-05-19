@@ -1,9 +1,13 @@
 #!/bin/bash
+
+# SLURM directives
 #SBATCH --job-name=seurat_cluster
-#SBATCH --output=seurat_load_%j.out
-#SBATCH --error=seurat_load_%j.err
+#SBATCH --output=1_seurat_load_matrices_%j.SLURMout
+#SBATCH --error=1_seurat_load_matrices_%j.SLURMerr
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=yep25yan@nbi.ac.uk
 
 # Arguments
 SCRIPT_DIR="$1"
