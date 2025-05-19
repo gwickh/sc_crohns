@@ -17,6 +17,10 @@ OUT_DIR="$2"
 mkdir -p "${OUT_DIR}"
 
 echo "Create the Seurat object"
+
+source /hpc-home/yep25yan/mamba/etc/profile.d/conda.sh
+conda activate r_env
+
 Rscript "${SCRIPT_DIR}/1_seurat_load_matrices.R" \
         1> "${OUT_DIR}/1_seurat_load_matrices.STDOUT" \
         2> "${OUT_DIR}/1_seurat_load_matrices.STDERR"
