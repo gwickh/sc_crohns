@@ -1,3 +1,6 @@
+# Set CRAN mirror
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
 # Load packages
 pkgs <- c(
   "Seurat",
@@ -6,12 +9,14 @@ pkgs <- c(
   "hdf5r"
 )
 
-for (pkg in pkgs) {
-  if (!require(pkg, quietly = TRUE, character.only = TRUE)) {
-    install.packages(pkg)
+local({
+  for (pkg in pkgs) {
+    if (!require(pkg, quietly = TRUE, character.only = TRUE)) {
+      install.packages(pkg)
+    }
+    library(pkg, character.only = TRUE)
   }
-  library(pkg, character.only = TRUE)
-}
+})
 
 # Set working directory
 setwd("project-area/data/crohns_scrnaseq/crohns_samples/")
@@ -63,13 +68,6 @@ merged <- merge(
 # Normalize data
 merged <- NormalizeData(merged)
 
-# Load updated cell cycle genes if not loaded
-if (!exists("cc.genes")) {
-  cc.genes <- Seurat::cc.genes.updated.2019
-}
-s.genes <- cc.genes$s.genes
-g2m.genes <- cc.genes$g2m.genes
-
 # Cell cycle scoring
 if (!exists("cc.genes")) {
   cc.genes <- Seurat::cc.genes.updated.2019
@@ -93,4 +91,4 @@ merged <- ScaleData(
 )
 
 # Write out
-saveRDS(object, file = object.Rds)
+saveRDS(merged, file = merged_object.Rds)
