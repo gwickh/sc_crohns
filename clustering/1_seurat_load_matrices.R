@@ -1,23 +1,3 @@
-# Set CRAN mirror
-options(repos = c(CRAN = "https://cloud.r-project.org"))
-
-# Load packages
-pkgs <- c(
-  "Seurat",
-  "tidyverse",
-  "Matrix",
-  "hdf5r"
-)
-
-local({
-  for (pkg in pkgs) {
-    if (!require(pkg, quietly = TRUE, character.only = TRUE)) {
-      install.packages(pkg)
-    }
-    library(pkg, character.only = TRUE)
-  }
-})
-
 # Set working directory
 setwd("project-area/data/crohns_scrnaseq/crohns_samples/")
 

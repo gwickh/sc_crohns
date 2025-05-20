@@ -1,17 +1,3 @@
-# Load packages
-pkgs <- c(
-  "Seurat",
-  "tidyverse",
-  "future"
-)
-
-for (pkg in pkgs) {
-  if (!require(pkg, quietly = TRUE, character.only = TRUE)) {
-    install.packages(pkg)
-  }
-  library(pkg, character.only = TRUE)
-}
-
 # Set working directory
 setwd("project-area/data/crohns_scrnaseq/crohns_samples/")
 
