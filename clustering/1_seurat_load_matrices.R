@@ -1,9 +1,18 @@
-# Set working directory
-setwd("project-area/data/crohns_scrnaseq/crohns_samples/")
+# Set static variables
+SCRIPT_DIR <- "sc_crohns/clustering/"
+MATRIX_DIR <- "project-area/data/crohns_scrnaseq/crohns_samples/"
+OUTDIR <- file.path(MATRIX_DIR, "clustering_output/")
+MIN_CELLS <- 3
+MIN_FEATURES <- 0
+VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
+
+# Source .Rprofile from sc_crohns/clustering/
+source(file.path(SCRIPT_DIR, ".Rprofile"))
 
 ## Load matrices
 # Get matrix path and sample names for existing filtered matrices
 matrix_paths <- list.files(
+  path = MATRIX_DIR,
   pattern = "filtered_feature_bc_matrix\\.h5$",
   recursive = TRUE,
   full.names = TRUE
@@ -27,7 +36,12 @@ for (i in seq_along(matrix_paths)) {
   }
   
   # Create Seurat object
-  seurat_obj <- CreateSeuratObject(counts = counts, project = sample)
+  seurat_obj <- CreateSeuratObject(
+    counts = counts, 
+    project = sample,
+    min.cells = MIN_CELLS,
+    min.features = MIN_FEATURES
+  )
   
   # Add sample metadata
   seurat_obj$sample_id <- sample
@@ -63,7 +77,6 @@ merged <- CellCycleScoring(
 )
 
 # Regress variables
-VARS_TO_REGRESS <- c("S.Score", "G2M.Score")
 
 merged <- ScaleData(
   merged,
@@ -71,4 +84,4 @@ merged <- ScaleData(
 )
 
 # Write out
-saveRDS(merged, file = merged_object.Rds)
+saveRDS(merged, file = file.path(OUTDIR, "merged_object.Rds"))
