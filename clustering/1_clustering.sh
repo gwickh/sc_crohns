@@ -21,14 +21,16 @@ echo "Create the Seurat object"
 source /hpc-home/yep25yan/mamba/etc/profile.d/conda.sh
 conda activate r_env
 
-# STEP 1A: Load matrices, create Seurat object, perform normalization, cell cycle scoring and scale by regression.
+echo STEP 1A: Load matrices, create Seurat object, perform normalization, cell cycle scoring and scale by regression.
 Rscript "${SCRIPT_DIR}/1_seurat_load_matrices.R" \
         1> "${OUT_DIR}/1_seurat_load_matrices.R.stdout" \
         2> "${OUT_DIR}/1_seurat_load_matrices.R.stderr"
+echo "merged_object.Rds written to ${OUT_DIR}"
 
-# STEP 1B: Perform PCA and feature selection.
-# Rscript "${SCRIPT_DIR}/1b_seurat_PCA.R" \
-#         1> "${OUT_DIR}/1b_seurat_PCA.R.stdout" \
-#         2> "${OUT_DIR}/1b_seurat_PCA.R.stderr"
+echo STEP 1B: Perform feature selection and PCA.
+Rscript "${SCRIPT_DIR}/1b_seurat_PCA.R" \
+        1> "${OUT_DIR}/1b_seurat_PCA.R.stdout" \
+        2> "${OUT_DIR}/1b_seurat_PCA.R.stderr"
+echo "dimensionally reduced merged_object.Rds written to ${OUT_DIR}"
 
 exit 0
