@@ -1,7 +1,7 @@
 # Set static variables
-SCRIPT_DIR <- "sc_crohns/clustering/"
-MATRIX_DIR <- "project-area/data/crohns_scrnaseq/crohns_samples/"
-OUTDIR <- file.path(MATRIX_DIR, "clustering_output/")
+SCRIPT_DIR <- "sc_crohns/clustering"
+MATRIX_DIR <- "project-area/data/crohns_scrnaseq/crohns_samples"
+OUTDIR <- "project-area/data/crohns_scrnaseq/clustering_output"
 MIN_CELLS <- 3
 MIN_FEATURES <- 0
 VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
