@@ -27,10 +27,10 @@ Rscript "${SCRIPT_DIR}/1_seurat_load_matrices.R" \
         2> "${OUT_DIR}/1_seurat_load_matrices.R.stderr"
 echo "merged_object.Rds written to ${OUT_DIR}"
 
-echo STEP 1B: Perform feature selection and PCA.
-Rscript "${SCRIPT_DIR}/1b_seurat_PCA.R" \
-        1> "${OUT_DIR}/1b_seurat_PCA.R.stdout" \
-        2> "${OUT_DIR}/1b_seurat_PCA.R.stderr"
-echo "dimensionally reduced merged_object.Rds written to ${OUT_DIR}"
+# echo STEP 1B: Perform feature selection and PCA.
+# Rscript "${SCRIPT_DIR}/1b_seurat_PCA.R" \
+#         1> "${OUT_DIR}/1b_seurat_PCA.R.stdout" \
+#         2> "${OUT_DIR}/1b_seurat_PCA.R.stderr"
+# echo "dimensionally reduced merged_object.Rds written to ${OUT_DIR}"
 
 exit 0
