@@ -1,15 +1,12 @@
 # Set static variables
-SCRIPT_DIR <- "sc_crohns/clustering"
-MATRIX_DIR <- "project-area/data/crohns_scrnaseq/crohns_samples"
-OUTDIR <- "project-area/data/crohns_scrnaseq/clustering_output"
 MIN_CELLS <- 3
 MIN_FEATURES <- 0
 VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
 
-# Source .Rprofile from sc_crohns/clustering/
-source(file.path(SCRIPT_DIR, ".Rprofile"))
+source(file.path("sc_crohns/clustering", ".Rprofile"))
 
-## Load matrices
+
+# Load matrices into Seurat obj -----------------------------------------
 # Get matrix path and sample names for existing filtered matrices
 matrix_paths <- list.files(
   path = MATRIX_DIR,
@@ -58,7 +55,8 @@ merged <- merge(
   project = "crohns_samples_merged"
 )
 
-## Run downstream Seurat functions
+
+## Normalise and regress against cell cycle scoring ------------------------
 # Normalize data
 merged <- NormalizeData(merged)
 
@@ -77,11 +75,10 @@ merged <- CellCycleScoring(
 )
 
 # Regress variables
-
 merged <- ScaleData(
   merged,
   vars.to.regress = VARS_TO_REGRESS
 )
 
 # Write out
-saveRDS(merged, file = file.path(OUTDIR, "merged_object.Rds"))
+saveRDS(merged, file = file.path(OUTDIR, "seurat_object.Rds"))
