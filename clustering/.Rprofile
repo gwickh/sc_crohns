@@ -27,3 +27,4 @@ cores <- min(max_workers, detectCores() - 1)
 plan("multisession", workers = cores)
 
 source(file.path(SCRIPT_DIR, "1_clustering_functions.R"))
+source(file.path(SCRIPT_DIR, "2_dea_functions.R"))
