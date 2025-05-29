@@ -1,7 +1,4 @@
-# Set static variables
-SCRIPT_DIR <- "sc_crohns/clustering"
-SEURAT_OBJECT_LOC <- "project-area/data/crohns_scrnaseq/clustering_output"
-OUTDIR <- SEURAT_OBJECT_LOC
+source(file.path("sc_crohns/clustering", ".Rprofile"))
 
 # Define values for PCA parameters
 PCA_params <- list(
@@ -32,9 +29,11 @@ for (ymin in disps) {
     mean.cutoff = c(xmin, xmax), 
     dispersion.cutoff = c(ymin, Inf)
   )
-  dim_reduction(
+  seurat_object <- dim_reduction(
     seurat_object,
-    genes.list = VariableFeatures(seurat_object)
+    genes.list = VariableFeatures(seurat_object),
+    dr = dr,
+    out_dir = file.path(OUTDIR, case)
   )
 }
 
@@ -48,9 +47,11 @@ for (nfeat in nfeats) {
     selection.method = "vst",
     nfeatures = nfeat
   )
-  dim_reduction(
+  seurat_object <- dim_reduction(
     seurat_object,
-    genes.list = VariableFeatures(seurat_object)
+    genes.list = VariableFeatures(seurat_object),
+    dr = dr,
+    out_dir = file.path(OUTDIR, case)
   )
 }
 

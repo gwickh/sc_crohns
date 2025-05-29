@@ -1,3 +1,5 @@
+source(file.path("sc_crohns/clustering", ".Rprofile"))
+
 # Function to get significant PCs
 GetNPCs <- function(in_dir) {
   pc_file <- file.path(in_dir, "num_PCs.txt")

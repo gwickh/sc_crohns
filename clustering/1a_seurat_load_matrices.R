@@ -5,9 +5,14 @@ VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
 
 source(file.path("sc_crohns/clustering", ".Rprofile"))
 
+if (file.exists(file.path(OUTDIR, "seurat_object.Rds"))) {
+  print("seurat_object already loaded, skipping")
+  q()
+}
 
 # Load matrices into Seurat obj -----------------------------------------
 # Get matrix path and sample names for existing filtered matrices
+
 matrix_paths <- list.files(
   path = MATRIX_DIR,
   pattern = "filtered_feature_bc_matrix\\.h5$",

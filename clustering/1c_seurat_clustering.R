@@ -1,3 +1,5 @@
+source(file.path("sc_crohns/clustering", ".Rprofile"))
+
 # Run clustering
 clustering_params <- list(
   disps = 0.5,
