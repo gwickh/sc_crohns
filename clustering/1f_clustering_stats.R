@@ -6,7 +6,9 @@ nfeats <- as.numeric(unlist(strsplit(params[params[,1]=="nfeats", 2], split=",")
 k <- as.numeric(unlist(strsplit(params[params[,1]=="k", 2], split=",")))
 res <- as.numeric(unlist(strsplit(params[params[,1]=="res", 2], split=",")))
 
-object <- readRDS(OBJ)
+if (!exists("seurat_object")) {
+  seurat_object <- readRDS(file.path(SEURAT_OBJECT_LOC, "seurat_object.Rds"))
+}
 
 df <- data.frame(hvg.set = NULL, PCs = NULL, k = NULL, res = NULL, num.cl = NULL, avg.silh.width = NULL, avg.umi = NULL, min.umi.val = NULL, min.umi.idx = NULL, min.umi.cl.size = NULL)
 
