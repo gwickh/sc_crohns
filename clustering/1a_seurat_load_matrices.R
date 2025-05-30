@@ -5,7 +5,7 @@ VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
 
 source(file.path("sc_crohns/clustering", ".Rprofile"))
 
-if (file.exists(file.path(OUTDIR, "seurat_object.Rds"))) {
+if (file.exists(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))) {
   print("seurat_object already loaded, skipping")
   q()
 }
@@ -61,7 +61,7 @@ merged <- merge(
 )
 
 
-## Normalise and regress against cell cycle scoring ------------------------
+## Normalise and perform cell cycle scoring ------------------------
 # Normalize data
 merged <- NormalizeData(merged)
 
@@ -86,4 +86,4 @@ merged <- ScaleData(
 )
 
 # Write out
-saveRDS(merged, file = file.path(OUTDIR, "seurat_object.Rds"))
+saveRDS(merged, file = file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
