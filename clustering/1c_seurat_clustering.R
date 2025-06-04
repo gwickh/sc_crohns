@@ -5,7 +5,7 @@ clustering_params <- list(
   disps = 0.5,
   nfeats = 5000,
   k = 30,
-  res = c(0.5,0.6,0.7,0.8,0.9,1,1.1,1.2)
+  res = seq(0.5, 1.2, 0.1)
 )
 
 disps <- clustering_params$disps

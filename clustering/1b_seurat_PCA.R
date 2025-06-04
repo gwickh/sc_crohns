@@ -43,9 +43,12 @@ xmin = 0.1
 xmax = 10
 disps = c(0.5, 1, 1.5)
 n_features = c(1000, 2000, 5000)
+
+# initialise empty lists
 dr_li <- list()
+vfeature_objects <- list()
   
-# Loop over variable feature selection methods
+# Loop over feature selection methods
 for (disp in disps) {
   filename <- paste("mean.var.plot_disp", disp, sep = "_")
   dr_name <- paste("pca", filename, sep = "_")
@@ -57,6 +60,10 @@ for (disp in disps) {
     mean.cutoff = c(xmin, xmax), 
     dispersion.cutoff = c(disp, Inf)
   )
+  
+  # save variable features  
+  vfeature_objects[[paste(filename, "vfeatures", sep = "_")]] <- seurat_object
+
   # Perform PCA with PCA_dr() and write elbow plot
   seurat_object <- PCA_dr(
     seurat_object,
@@ -76,6 +83,9 @@ for (n in n_features) {
     selection.method = "vst",
     nfeatures = n
   )
+  # save variable features  
+  vfeature_objects[[paste(filename, "vfeatures", sep = "_")]] <- seurat_object
+  
   # Perform PCA with PCA_dr() and write elbow plot
   seurat_object <- PCA_dr(
     seurat_object,
@@ -85,7 +95,7 @@ for (n in n_features) {
   )
 }
 
-# Generate elbow and loadings visualisations ------------------------------
+# Generate elbow, PC loadings and variable features visualisations ------------
 # Create elbow plot for each PCA performed
 elbow_plots <- lapply(dr_li, function(dr) {
   ElbowPlot(
@@ -115,11 +125,11 @@ loading_plots <- lapply(dr_li, function(dr) {
   VizDimLoadings(
     seurat_object,
     dims = 1:3,
-    reduction = paste("pca", dr, sep="_")
+    reduction = paste("pca", dr, sep="_"),
+    ncol = 3
   ) +
   ggtitle(paste0(dr, ": PCs 1-3")) +
-  theme(plot.title = element_text(size = 10)) +
-  ggdraw()
+  theme(plot.title = element_text(size = 10))
 })
 
 combined_loadings <- wrap_plots(
@@ -133,6 +143,83 @@ ggsave(
   height = 4 * ceiling(length(dr_li) / 2),
   dpi = 300
 )
+
+# Plot highest variable genes
+vfp_list <- list()
+for (name in names(vfeature_objects)) {
+  hvf <- HVFInfo(vfeature_objects[[name]]) 
+  if ("variance.standardized" %in% colnames(hvf)) {
+    top_genes <- hvf %>%
+      arrange(desc(variance.standardized)) %>%
+        head(10) %>%
+          rownames()
+  } else if ("mvp.dispersion.scaled" %in% colnames(hvf)) {
+    top_genes <- hvf %>%
+      arrange(desc(mvp.dispersion.scaled)) %>%
+        head(10) %>%
+          rownames()
+  } else {
+    warning(
+      paste0("No valid HVF metric found for ", name, 
+        "\ncolumn names = ", paste(colnames(hvf), collapse = ", ")))
+    next
+  }
+  
+  vfplot <- VariableFeaturePlot(vfeature_objects[[name]])
+  vfplot <- LabelPoints(
+    plot = vfplot,
+    points = top_genes, 
+    repel = TRUE,
+    xnudge = 0,
+    ynudge = 0
+  ) +
+    ggtitle(paste("Variable Features:", name)) +
+    theme(plot.title = element_text(size = 10))
+  vfp_list[[name]] <- vfplot
+}
+
+combined_vfeatures <- wrap_plots(
+  vfp_list,
+  ncol = ceiling(length(dr_li) / 2)
+)
+  
+ggsave(
+  filename = file.path(PCA_OUTPUT_PATH, "v_features.png"),
+  plot = combined_vfeatures,
+  width = 18, height = 5, dpi = 300
+)
+
+# Check for missing values
+plot_data <- HVFInfo(vfeature_objects[[name]]) %>%
+  rownames_to_column("gene")
+
+# Try to detect plotting columns dynamically
+col_x <- grep("mean", colnames(plot_data), value = TRUE)[1]
+col_y <- grep("disp|variance|scaled", colnames(plot_data), value = TRUE)[1]
+
+# Proceed if both x and y cols are found
+if (!is.null(col_x) && !is.null(col_y)) {
+  dropped <- plot_data %>%
+    filter(
+      !is.finite(.data[[col_x]]) |
+        !is.finite(.data[[col_y]]) |
+        is.na(.data[[col_x]]) |
+        is.na(.data[[col_y]])
+    )
+  
+  if (nrow(dropped) > 0) {
+    dropped_info <- paste0(
+      "== ", name, " ==\n",
+      paste0("Gene: ", dropped$gene, 
+             ", ", col_x, ": ", dropped[[col_x]],
+             ", ", col_y, ": ", dropped[[col_y]]),
+      collapse = "\n"
+    )
+    cat(dropped_info, "\n\n", 
+        file = file.path(PCA_OUTPUT_PATH, "dropped_variable_features.txt"),
+        append = TRUE)
+  }
+}
 
 # Save Final Object
 saveRDS(seurat_object, file = file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
