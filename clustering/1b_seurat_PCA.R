@@ -189,37 +189,5 @@ ggsave(
   width = 18, height = 5, dpi = 300
 )
 
-# Check for missing values
-plot_data <- HVFInfo(vfeature_objects[[name]]) %>%
-  rownames_to_column("gene")
-
-# Try to detect plotting columns dynamically
-col_x <- grep("mean", colnames(plot_data), value = TRUE)[1]
-col_y <- grep("disp|variance|scaled", colnames(plot_data), value = TRUE)[1]
-
-# Proceed if both x and y cols are found
-if (!is.null(col_x) && !is.null(col_y)) {
-  dropped <- plot_data %>%
-    filter(
-      !is.finite(.data[[col_x]]) |
-        !is.finite(.data[[col_y]]) |
-        is.na(.data[[col_x]]) |
-        is.na(.data[[col_y]])
-    )
-  
-  if (nrow(dropped) > 0) {
-    dropped_info <- paste0(
-      "== ", name, " ==\n",
-      paste0("Gene: ", dropped$gene, 
-             ", ", col_x, ": ", dropped[[col_x]],
-             ", ", col_y, ": ", dropped[[col_y]]),
-      collapse = "\n"
-    )
-    cat(dropped_info, "\n\n", 
-        file = file.path(PCA_OUTPUT_PATH, "dropped_variable_features.txt"),
-        append = TRUE)
-  }
-}
-
 # Save Final Object
 saveRDS(seurat_object, file = file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
