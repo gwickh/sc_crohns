@@ -21,6 +21,7 @@ for (pkg in pkgs) {
 }
 
 # Set parallelisation
+set.seed(1234)
 options(future.globals.maxSize = 60 * 1024^3)
 max_workers <- parallelly::availableCores()
 cores <- min(max_workers, detectCores() - 1)
