@@ -6,7 +6,7 @@ VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
 source(file.path("sc_crohns/clustering", ".Rprofile"))
 
 if (file.exists(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))) {
-  print("seurat_object already loaded, skipping")
+  print("seurat_object already created, skipping")
   q()
 }
 
