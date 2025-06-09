@@ -59,7 +59,6 @@ dir.create(CLUSTERING_OUTPUT_PATH, showWarnings = FALSE)
 for (disp in disps) {
   filename <- paste("mean.var.plot_disp", disp, sep="_")
   dr_name <- paste("pca", filename, sep="_")
-  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   seurat_object <- Clust_dr(
     seurat_object, 
     dr = dr_name, 
