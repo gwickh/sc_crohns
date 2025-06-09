@@ -41,8 +41,6 @@ dir.create(PCA_OUTPUT_PATH, showWarnings = FALSE)
 # Define values for PCA parameters
 xmin = 0.1
 xmax = 10
-disps = c(0.5, 1, 1.5)
-n_features = c(1000, 2000, 5000)
 
 # initialise empty lists
 dr_li <- list()

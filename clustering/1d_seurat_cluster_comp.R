@@ -30,7 +30,14 @@ ClustersComposition <- function(
   df$sample <- factor(df$sample, levels = rev(sort(unique(sample_ident))))
   df$Freq <- NULL
   
-  write.table(df, file = paste0(out.prefix, ".tsv"), row.names = FALSE, sep = "\t", quote = FALSE)
+  write.table(
+    df, 
+    file = file.path(
+      CLUSTERING_OUTPUT_PATH, paste0(out.prefix, ".tsv")
+    ), 
+    row.names = FALSE, 
+    sep = "\t",
+    quote = FALSE)
   
   plot_bar <- function(data, x, y, fill, norm = FALSE) {
     g <- ggplot(data, aes(x = {{x}}, y = {{y}}, fill = {{fill}})) +
@@ -65,7 +72,10 @@ ClustersComposition <- function(
     combined_plot <- (p1 | p2) / (p3 | p4)
     
     ggsave(
-      filename = paste0(out.prefix, "_cluster_composition.pdf"),
+      filename = file.path(
+        CLUSTERING_OUTPUT_PATH, 
+        paste0(out.prefix, "_cluster_composition.pdf")
+      ),
       plot = combined_plot,
       width = width,
       height = height
@@ -144,15 +154,9 @@ SummarizeClusteringStats <- function(
 }
 
 # ----------------- Parameters -----------------
-disps <- 0.5
-n_features <- 1000
-neighbors <- 10
-res <- 0.5
-
 disp_cases <- paste0("mean.var.plot_disp_", disps)
 vst_cases  <- paste0("vst_top_", n_features)
 cases <- c(disp_cases, vst_cases)
-drs <- paste0("pca_", cases)
 
 # ----------------- Run Analysis -----------------
 df <- data.frame()

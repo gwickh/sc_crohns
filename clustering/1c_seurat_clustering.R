@@ -56,12 +56,6 @@ Clust_dr <- function(
 CLUSTERING_OUTPUT_PATH <- file.path(SEURAT_OBJECT_PATH, "clustering_stats")
 dir.create(CLUSTERING_OUTPUT_PATH, showWarnings = FALSE)
 
-# Define params
-disps <- 0.5 # seq(0.5, 1.5, 0.5)
-n_features <- 1000 # c(1000, 2000, 5000)
-neighbors <- 10 # seq(10, 50, 5)
-res <- 0.5 # seq(0.5, 1.2, 0.1)
-
 for (disp in disps) {
   filename <- paste("mean.var.plot_disp", disp, sep="_")
   dr_name <- paste("pca", filename, sep="_")
