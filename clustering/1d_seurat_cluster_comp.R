@@ -1,13 +1,14 @@
+# Load dependencies and environment
 source(file.path("sc_crohns/clustering", ".Rprofile"))
 
 CLUSTERING_OUTPUT_PATH <- file.path(SEURAT_OBJECT_PATH, "clustering_stats")
+dir.create(CLUSTERING_OUTPUT_PATH, showWarnings = FALSE, recursive = TRUE)
 
 if (!exists("seurat_object")) {
   seurat_object <- readRDS(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
 }
 
-# Functions to calculate cluster compositions and silhouette scores ------------
-# compute cluster composition
+# ----------------- Function: Compute Cluster Composition -----------------
 ClustersComposition <- function(
     seurat_object, 
     out.prefix, 
@@ -15,7 +16,7 @@ ClustersComposition <- function(
     sample.ident.slot = "orig.ident",
     width = 6, 
     height = 3
-) {
+  ) {
   if (!all(c(cl.ident.slot, sample.ident.slot) %in% colnames(seurat_object@meta.data))) {
     stop("One or both of the specified metadata slots do not exist.")
   }
@@ -23,24 +24,19 @@ ClustersComposition <- function(
   sample_ident <- seurat_object@meta.data[[sample.ident.slot]]
   cl_ident <- seurat_object@meta.data[[cl.ident.slot]]
   
-  # Count cells per (sample, cluster)
   df <- as.data.frame(table(sample = sample_ident, cluster = cl_ident))
-  
-  # Ensure numeric values and correct factor levels
   df$num <- as.numeric(df$Freq)
   df$cluster <- factor(df$cluster, levels = sort(unique(cl_ident)))
   df$sample <- factor(df$sample, levels = rev(sort(unique(sample_ident))))
-  df$Freq <- NULL  # remove redundant column
+  df$Freq <- NULL
   
-  # Save raw counts
   write.table(df, file = paste0(out.prefix, ".tsv"), row.names = FALSE, sep = "\t", quote = FALSE)
   
-  # Plot function
-  plot_bar <- function(data, x, y, fill, filename, norm = FALSE) {
-    g <- ggplot(data, aes_string(x = x, y = y, fill = fill)) + 
-      theme_minimal() + 
-      coord_flip() + 
-      xlab("") + 
+  plot_bar <- function(data, x, y, fill, norm = FALSE) {
+    g <- ggplot(data, aes(x = {{x}}, y = {{y}}, fill = {{fill}})) +
+      theme_minimal() +
+      coord_flip() +
+      xlab("") +
       theme(axis.text.y = element_text(size = 15))
     
     if (norm) {
@@ -49,121 +45,166 @@ ClustersComposition <- function(
       g <- g + geom_bar(stat = "identity") + ylab("number of cells")
     }
     
-    pdf(filename, width = width, height = height)
-    print(g)
-    dev.off()
+    return(g)
   }
   
-  # Generate plots
-  plot_bar(df, "sample", "num", "cluster", paste0(out.prefix, "_SbyC_abs.pdf"), norm = FALSE)
-  plot_bar(df, "sample", "num", "cluster", paste0(out.prefix, "_SbyC_norm.pdf"), norm = TRUE)
-  plot_bar(df, "cluster", "num", "sample", paste0(out.prefix, "_CbyS_abs.pdf"), norm = FALSE)
-  plot_bar(df, "cluster", "num", "sample", paste0(out.prefix, "_CbyS_norm.pdf"), norm = TRUE)
-  
-  return()
+  # wrapper to generate and combine all four plots
+  plot_cluster_composition <- function(data, out.prefix, width = 12, height = 8) {
+    p1 <- plot_bar(data, x = sample, y = num, fill = cluster, norm = FALSE) +
+      ggtitle("Sample by Cluster (absolute)")
+    
+    p2 <- plot_bar(data, x = sample, y = num, fill = cluster, norm = TRUE) +
+      ggtitle("Sample by Cluster (normalized)")
+    
+    p3 <- plot_bar(data, x = cluster, y = num, fill = sample, norm = FALSE) +
+      ggtitle("Cluster by Sample (absolute)")
+    
+    p4 <- plot_bar(data, x = cluster, y = num, fill = sample, norm = TRUE) +
+      ggtitle("Cluster by Sample (normalized)")
+    
+    combined_plot <- (p1 | p2) / (p3 | p4)
+    
+    ggsave(
+      filename = paste0(out.prefix, "_cluster_composition.pdf"),
+      plot = combined_plot,
+      width = width,
+      height = height
+    )
+  }
+  plot_cluster_composition(df, out.prefix)
 }
-
-# compute silhouette scores
-SilhouetteSingle <- function(dist, ident) {
-  id <- unique(ident)
-  if (length(id) > 1) { 
-    silh_data <- silhouette(as.numeric(ident), dist)
+# ----------------- Function: Compute Silhouette Scores -----------------
+SilhouetteSingle <- function(
+  dist, 
+  cl_ident,
+  cluster_meta = seurat_object@meta.data[[cl_ident]]
+) {
+  if (length(unique(cluster_meta)) > 1) { 
+    silh_data <- cluster::silhouette(
+      as.numeric(as.factor(cluster_meta)), 
+      dist
+    )
     silh_summ <- summary(silh_data)
-    saveRDS(silh_summ, file = file.path(
-      CLUSTERING_OUTPUT_PATH, 
-      "silh_summary.Rds")
+    
+    saveRDS(
+      silh_summ, 
+      file = file.path(CLUSTERING_OUTPUT_PATH, paste0(cl_ident, "_silh.Rds"))
     )
     ggsave(
-      filename = file.path(CLUSTERING_OUTPUT_PATH, "silh_summary.png"),
-      plot = fviz_silhouette(silh_data), 
+      filename = file.path(
+        CLUSTERING_OUTPUT_PATH, 
+        paste0(cl_ident, "_silh.png")
+      ),
+      plot = factoextra::fviz_silhouette(silh_data), 
       width = 8, height = 6, dpi = 150
     )
+    return(silh_summ)
   }
-  return()
+  return(NULL)
 }
 
-# get clustering statistics
-disps <- seq(0.5, 1.5, 0.5)
-n_features <- c(1000, 2000, 5000)
-K <- seq(10, 50, 5)
-res <- seq(0.5, 1.2, 0.1)
-
-# Create list of cases and dimensionality reductions
-cases <- c()
-for (disp in disps) {
-  cases <- c(cases, paste("mean.var.plot_disp", disp, sep="_"))
-}
-for (nfeat in nfeats) {
-  cases <- c(cases, paste("vst_top", nfeat, sep="_"))
-}
-drs <- paste("pca", cases, sep="_")
-
-# Create directories for each dim red
-for (ll in drs) {
-  dir.create(file.path(ll), showWarnings = FALSE, recursive = TRUE)
-}
+# ----------------- Function: Summarize Clustering -----------------
+SummarizeClusteringStats <- function(
+    silh_data,
+    seurat_object,
+    cl_ident,
+    case,
+    dim,
+    k,
+    r
+) {
+  n_clusters <- length(silh_data$clus.sizes)
+  avg_silh <- as.numeric(silh_data$avg.width)
+  cluster_meta <- seurat_object@meta.data[[cl_ident]]
+  avg_umi <- round(mean(seurat_object@meta.data$nCount_RNA))
   
-# Perform cluster composition computation
-for (dr in drs) {
-  print(paste("dr =", dr))
-  for (k in K) {
+  avg_umi_per_cluster <- sapply(
+    unique(cluster_meta), 
+    function(cl) round(mean(seurat_object@meta.data$nCount_RNA[cluster_meta == cl]))
+  )
+  names(avg_umi_per_cluster) <- as.character(unique(cluster_meta)) 
+  
+  idx_min_umi <- which.min(avg_umi_per_cluster)
+  min_avg_umi <- avg_umi_per_cluster[idx_min_umi]
+  min_cluster_size <- sum(cluster_meta == names(avg_umi_per_cluster)[idx_min_umi])
+  min_umi_cluster <- names(avg_umi_per_cluster)[idx_min_umi]
+  
+  return(data.frame(
+    case = case,
+    dim = dim,
+    k = k,
+    r = r,
+    n_clusters = n_clusters,
+    avg_silhouette = avg_silh,
+    avg_umi = avg_umi,
+    min_avg_umi = min_avg_umi,
+    min_umi_cluster = min_umi_cluster,
+    min_cluster_size = min_cluster_size
+  ))
+}
+
+# ----------------- Parameters -----------------
+disps <- 0.5
+n_features <- 1000
+neighbors <- 10
+res <- 0.5
+
+disp_cases <- paste0("mean.var.plot_disp_", disps)
+vst_cases  <- paste0("vst_top_", n_features)
+cases <- c(disp_cases, vst_cases)
+drs <- paste0("pca_", cases)
+
+# ----------------- Run Analysis -----------------
+df <- data.frame()
+
+for (case in cases) {
+  dr <- paste0("pca_", case)
+  dir.create(dr, showWarnings = FALSE, recursive = TRUE)
+  dim_file <- file.path(CLUSTERING_OUTPUT_PATH, paste(dr, "num_PCs.txt", sep = "_"))
+  dim <- c(as.matrix(read.table(dim_file)))
+  data <- as.matrix(seurat_object@reductions[[dr]]@cell.embeddings[,1:dim])
+  dist <- parDist(data, threads = cores)
+  
+  for (k in neighbors) {
     for (r in res) {
-      cl_ident <- paste("clusters", dr, "k", k, "res", r, sep="_")
+      cl_ident <- paste("clusters", dr, "k", k, "res", r, sep = "_")
       out_prefix <- file.path(dr, cl_ident)
+      
+      if (!(cl_ident %in% colnames(seurat_object@meta.data))) next
+      
       ClustersComposition(
         seurat_object = seurat_object, 
         out.prefix = out_prefix, 
         cl.ident.slot = cl_ident, 
         sample.ident.slot = "orig.ident"
       )
-      SilhouetteSingle(
-        dist = dist, 
-        ident = c(as.matrix(seurat_object@meta.data[cl_ident])), 
-        out.prefix = out_prefix
-      )
       
+      silh_data <- SilhouetteSingle(
+        dist = dist, 
+        cl_ident = cl_ident
+      )
+
+      if (!is.null(silh_data)) {
+        summary <- SummarizeClusteringStats(
+          silh_data = silh_data,
+          seurat_object = seurat_object,
+          cl_ident = cl_ident,
+          case = case,
+          dim = dim,
+          k = k,
+          r = r
+        )
+        df <- rbind(df, summary)
+      }
     }
   }
 }
 
-for (kk in k) {
-  for (r in res) {
-    n <- length(silh_data$clus.sizes)
-    avg_silh <- silh_data$si.summary[4]
-    meta <- seurat_object@meta.data[[cl_ident]]
-    avg_umi <- round(mean(seurat_object@meta.data$nCount_RNA))
-    avg_umi_cl <- unlist(lapply(1:n-1, function(x) round(mean(seurat_object@meta.data$nCount_RNA[meta == as.character(x)]))))
-    idx_min_umi <- order(avg_umi_cl)[1]-1
-    cl_size <- sum(meta == as.character(idx_min_umi))
-    v <- c(case, dim, kk, r, n, avg_silh, avg_umi, min(avg_umi_cl), idx_min_umi, cl_size)
-    df <- rbind(df, v)
-  }
-}
-
-df <- data.frame(
-  hvg.set = 1, 
-  PCs = 1, 
-  k = 1, 
-  res = 1, 
-  num.cl = 1, 
-  avg.silh.width = 1, 
-  avg.umi = 1, 
-  min.umi.val = 1, 
-  min.umi.idx = 1, 
-  min.umi.cl.size = 1
+# ----------------- Save Summary -----------------
+write.table(
+  df,
+  file = file.path(CLUSTERING_OUTPUT_PATH, "clustering_summary.tsv"),
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
 )
-
-df <- data.frame(
-  "hvg.set", 
-  "PCs", 
-  "k", 
-  "res", 
-  "num.cl", 
-  "avg.silh.width", 
-  "avg.umi", 
-  "min.umi.cl.val", 
-  "min.umi.cl.idx", 
-  "min.umi.cl.size"
-)
-
-
