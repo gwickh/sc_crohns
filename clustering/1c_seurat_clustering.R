@@ -57,15 +57,14 @@ CLUSTERING_OUTPUT_PATH <- file.path(SEURAT_OBJECT_PATH, "clustering_stats")
 dir.create(CLUSTERING_OUTPUT_PATH, showWarnings = FALSE)
 
 # Define params
-disps <- seq(0.5, 1.5, 0.5)
-n_features <- c(1000, 2000, 5000)
-neighbors <- seq(10, 50, 5)
-res <- seq(0.5, 1.2, 0.1)
+disps <- 0.5 # seq(0.5, 1.5, 0.5)
+n_features <- 1000 # c(1000, 2000, 5000)
+neighbors <- 10 # seq(10, 50, 5)
+res <- 0.5 # seq(0.5, 1.2, 0.1)
 
 for (disp in disps) {
   filename <- paste("mean.var.plot_disp", disp, sep="_")
   dr_name <- paste("pca", filename, sep="_")
-  out_dir <- file.path(SEURAT_OBJECT_PATH, dr_name)
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   seurat_object <- Clust_dr(
     seurat_object, 
@@ -80,9 +79,8 @@ for (disp in disps) {
 }
 
 for (n in n_features) {
-  filename <- paste("vst_top", n, sep="")
+  filename <- paste("vst_top", n, sep="_")
   dr_name <- paste("pca", filename, sep="_")
-  out_dir <- file.path(SEURAT_OBJECT_PATH, dr_name)
   seurat_object <- Clust_dr(
     seurat_object, 
     dr = dr_name, 
