@@ -30,14 +30,16 @@ ClustersComposition <- function(
   df$sample <- factor(df$sample, levels = rev(sort(unique(sample_ident))))
   df$Freq <- NULL
   
+  out_path <- file.path(CLUSTERING_OUTPUT_PATH, paste0(out.prefix, ".tsv"))
+  dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
+  
   write.table(
     df, 
-    file = file.path(
-      CLUSTERING_OUTPUT_PATH, paste0(out.prefix, ".tsv")
-    ), 
+    file = out_path, 
     row.names = FALSE, 
     sep = "\t",
-    quote = FALSE)
+    quote = FALSE
+  )
   
   plot_bar <- function(data, x, y, fill, norm = FALSE) {
     g <- ggplot(data, aes(x = {{x}}, y = {{y}}, fill = {{fill}})) +
