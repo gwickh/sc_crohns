@@ -2,6 +2,7 @@ OBJ <- args[1]
 MODE <- args[2]
 CL <- args[3]
 CELLS <- args[4]
+OUT_OBJ <- args[5]
 
 cls <- unlist(strsplit(CL, split=","))
 dr <- gsub("_k.*", "", gsub("clusters_", "umap_", MODE))
@@ -22,7 +23,9 @@ dev.off()
 pdf(file.path(dir, "umap_filt_percent_mito.pdf"))
 FeaturePlot(object, reduction = dr, cells = cells, features = "percent_mito")
 
-object <- readRDS(IN_OBJ)
+
+
+object <- readRDS(OBJ)
 cells <- read.table(CELLS)[,1]
 
 object <- subset(object, cells = cells)
