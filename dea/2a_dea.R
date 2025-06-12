@@ -7,6 +7,8 @@ LATENT_VARS <- NULL
 TOP_DEG <- 50
 GENES_EXCLUDE <- NULL
 CORES <- 8
+CL_MODE <- "clusters_pca_mean.var.plot_disp_0.25_k_10_res_0.2"
+TEST <- "wilcox"
 
 DEA_OUT_DIR <- file.path(SEURAT_OBJECT_PATH, "DEA_output")
 dir.create(DEA_OUT_DIR, showWarnings = FALSE)
@@ -18,6 +20,8 @@ if (!exists("seurat_object")) {
 source(file.path("sc_crohns/clustering", ".Rprofile"))
 source(file.path("sc_crohns/dea", "2_dea_functions.R"))
 
+
+seurat_object <- MergeDataLayersSparse(seurat_object = seurat_object)
 Idents(seurat_object) <- seurat_object@meta.data[["seurat_clusters"]]
 
 genes <- rownames(LayerData(seurat_object, layer = "counts"))

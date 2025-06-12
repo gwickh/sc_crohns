@@ -1,4 +1,48 @@
 
+# ------------------ FUNCTION: Merge data layers for DEA ----------------------
+MergeDataLayersSparse <- function(seurat_object, assay = "RNA") {
+  library(Matrix)
+  
+  rna_assay <- seurat_object[[assay]]
+  data_layers <- grep("^data\\.", Layers(rna_assay), value = TRUE)
+  
+  # Extract all data matrices
+  data_list <- lapply(data_layers, function(layer) {
+    GetAssayData(rna_assay, layer = layer)
+  })
+  names(data_list) <- data_layers
+  
+  # Get union of all genes
+  all_genes <- unique(unlist(lapply(data_list, rownames)))
+  
+  # Reindex each matrix to the union of all genes
+  data_list_reindexed <- lapply(data_list, function(mat) {
+    # Create a sparse zero matrix with all genes
+    zero_mat <- Matrix(0, nrow = length(all_genes), ncol = ncol(mat), sparse = TRUE)
+    rownames(zero_mat) <- all_genes
+    colnames(zero_mat) <- colnames(mat)
+    
+    # Fill in values where genes exist
+    zero_mat[rownames(mat), ] <- mat
+    return(zero_mat)
+  })
+  
+  # Combine column-wise
+  combined_data <- do.call(cbind, data_list_reindexed)
+  
+  # Reorder columns to match Seurat object
+  combined_data <- combined_data[, colnames(seurat_object), drop = FALSE]
+  
+  # Store in @data slot
+  seurat_object <- SetAssayData(
+    object = seurat_object,
+    assay = "RNA",
+    layer = "merged.data",
+    new.data = combined_data
+  )
+  return(seurat_object)
+}
+
 # --------------------- FUNCTION: Create Gene Markers table ------------------
 # Identify marker genes (DEGs) between  groups of cells (ident.1 vs. ident.2)
 # and summarize their expression levels
@@ -16,13 +60,13 @@ GeneMarkersTable <- function(
   # Get mean expression values for cells with identity ident.1 and ident.2
   cells.1 <- WhichCells(object = object, idents = ident.1)
   exp1 <- apply(
-    GetAssayData(object = object, assay = "RNA")[, cells.1, drop = F], 
+    GetAssayData(object = object, assay = "RNA", slot = "merged.data")[, cells.1, drop = F], 
     1, 
     function(x) mean(x = expm1(x = x)) # reverse log-normalization 
   )
   cells.2 <- WhichCells(object = object, idents = ident.2)
   exp2 <- apply(
-    GetAssayData(object = object, assay = "RNA")[, cells.2, drop = F],
+    GetAssayData(object = object, assay = "RNA", slot = "merged.data")[, cells.2, drop = F],
     1, 
     function(x) mean(x = expm1(x = x))
   )
@@ -272,7 +316,7 @@ FilterClusterGeneMarkersPairs <- function(
         )
         if (heatmap) {
           cells <- colnames(
-            GetAssayData(object))[Idents(object) %in% sort(
+            GetAssayData(object, slot = "merged.data"))[Idents(object) %in% sort(
               c(clusters[i], clusters[j])
             )]
           plot.name <- paste0(
@@ -335,7 +379,7 @@ FilterClusterGeneMarkersAll <- function(
   if (id != "") Idents(object) <- id
   if (length(clusters) == 0) clusters <- levels(Idents(object))
   
-  cells <- colnames(GetAssayData(object))[Idents(object) %in% clusters]
+  cells <- colnames(GetAssayData(object, slot = "merged.data"))[Idents(object) %in% clusters]
   
   for (i in 1:length(clusters)) {
     deg.table <- paste0(
