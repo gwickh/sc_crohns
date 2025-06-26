@@ -4,7 +4,7 @@ if (!exists("seurat_object")) {
   seurat_object <- readRDS(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
 }
 
-# Function to perform dimensionality reduction by PCA ------------------
+# ---------- Function: perform dimensionality reduction by PCA ----------------
 PCA_dr <- function(
   seurat_object,
   genes.list,
@@ -31,7 +31,6 @@ PCA_dr <- function(
   )
   return(seurat_object)
 }
-
 
 # Loop over variable feature selection methods and run PCA ----------------
 # Create directory to store PCA stats
