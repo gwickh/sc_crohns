@@ -8,6 +8,7 @@
 #SBATCH --mem=128G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
+#SBATCH --partition=ei-medium
 
 # Arguments
 SCRIPT_DIR="$1"
@@ -19,11 +20,12 @@ mkdir -p "${OUT_DIR}"
 source /hpc-home/yep25yan/mamba/etc/profile.d/conda.sh
 conda activate r_env
 scripts=(
-    "1a_seurat_load_matrices.R"
-    "1b_seurat_PCA.R"
-    "1c_seurat_clustering.R"
-    "1d_seurat_cluster_comp.R"
-    "1e_seurat_UMAP.R"
+    # "1a_seurat_load_matrices.R"
+    # "1b_seurat_PCA.R"
+    # "1c_seurat_clustering.R"
+    "1c_filter_doublets.R"
+    # "1d_seurat_cluster_comp.R"
+    # "1e_seurat_UMAP.R"
 )
 
 for script in "${scripts[@]}"; do

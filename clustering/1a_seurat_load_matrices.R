@@ -1,6 +1,6 @@
 # Set static variables
 MIN_CELLS <- 3
-MIN_FEATURES <- 0
+MIN_FEATURES <- 200
 VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
 
 source(file.path("sc_crohns/clustering", ".Rprofile"))
@@ -45,6 +45,8 @@ for (i in seq_along(matrix_paths)) {
     min.features = MIN_FEATURES
   )
   
+  
+  
   # Add sample metadata
   seurat_obj$sample_id <- sample
   
@@ -60,6 +62,14 @@ merged <- merge(
   project = "crohns_samples_merged"
 )
 
+# Annotate mitochondrial content
+merged[["percent.mt"]] <- PercentageFeatureSet(merged, pattern = "^MT-")
+
+# Filter low-quality cells
+merged <- subset(
+  merged, 
+  subset = nFeature_RNA > 500 & nFeature_RNA < 6000 & percent.mt < 10
+)
 
 ## Normalise and perform cell cycle scoring ------------------------
 # Normalize data

@@ -1,34 +1,41 @@
-OBJ <- args[1]
-MODE <- args[2]
-CL <- args[3]
-CELLS <- args[4]
-OUT_OBJ <- args[5]
+MODE <- c(
+  "clusters_pca_mean.var.plot_disp_0.5_k_10_res_1.2" 
+)
+CL <- c("44")
+OUT <- cells.tsv
+OUT_OBJ <- "obj"
+backup_object <- seurat_object
 
 cls <- unlist(strsplit(CL, split=","))
 dr <- gsub("_k.*", "", gsub("clusters_", "umap_", MODE))
 
-object <- readRDS(OBJ)
-dir <- dirname(CELLS)
+object <- readRDS(seurat_object)
+dir <- dirname(OUT)
 
-idx <- which(!(object@meta.data[[MODE]] %in% cls))
-cells <- colnames(object)[idx]
+idx <- which(!(seurat_object@meta.data[[MODE]] %in% cls))
+cells <- colnames(seurat_object)[idx]
 
 write.table(cells, file = CELLS, col.names = FALSE, row.names = FALSE, quote = FALSE)
+seurat_object <- subset(seurat_object, cells = cells)
+seurat_object <- ScaleData(seurat_object)
 
-object <- PercentageFeatureSet(object, "^MT-", col.name = "percent_mito")
-pdf(file.path(dir, "umap_orig_percent_mito.pdf"))
-FeaturePlot(object, reduction = dr, features = "percent_mito")
+
+seurat_object <- PercentageFeatureSet(seurat_object, "^MT-", col.name = "percent_mito")
+plot <- FeaturePlot(seurat_object, reduction = dr, features = "percent_mito")
+pdf("percent_mito_plot.pdf")
+print(plot)
 dev.off()
 
-pdf(file.path(dir, "umap_filt_percent_mito.pdf"))
-FeaturePlot(object, reduction = dr, cells = cells, features = "percent_mito")
+plot <- FeaturePlot(seurat_object,  reduction = dr, features = "nCount_RNA")    # Total UMI count
+pdf("nCount_RNA.pdf")
+print(plot)
+dev.off()
 
+plot <- FeaturePlot(seurat_object,  reduction = dr, features = "nFeature_RNA")
+pdf("nFeature_RNA_plot.pdf")
+print(plot)
+dev.off()
 
+seurat_object <- subset(seurat_object, subset = percent_mito < 10)
 
-object <- readRDS(OBJ)
-cells <- read.table(CELLS)[,1]
-
-object <- subset(object, cells = cells)
-object <- ScaleData(object)
-
-saveRDS(object, file = OUT_OBJ)
+saveRDS(seurat_object, file = OUT_OBJ)
