@@ -16,32 +16,32 @@ runDoubletDetection <- function(
     expDoublPerc = 2,
     epsilon = 0.0001,
     pN = 0.25,
-    cluster_col,
+    clusters,
     out_dir
 ) {
-  all_summaries <- list()
-  
-  count_layers <- grep("^counts", names(seurat_obj[["RNA"]]@layers), value = TRUE)
-  message("Count layers found: ", paste(count_layers, collapse = ", "))
-
-  for (layer_name in count_layers) {
     
-    counts_matrix <- seurat_obj[["RNA"]]@layers[[layer_name]]
-    colnames(counts_matrix) <- colnames(seurat_obj)
+    samp_split <- SplitObject(seurat_object, split.by = "sample_id") 
     
-    new_assay <- CreateAssayObject(counts = counts_matrix)
+    samp_split <- lapply(
+      samp_split, 
+      run_doubletfinder_custom, 
+      multiplet_rate = 0.01
+    )
     
-    # Add this assay to the Seurat object
-    seurat_obj[[assay_name]] <- new_assay
+    sweep_list <- paramSweep(sample, PCs = 1:min_pc, sct = FALSE)   
+    sweep_stats <- summarizeSweep(sweep_list)
     
-    # Set default assay to new assay
-    DefaultAssay(seurat_obj) <- assay_name
+    bcmvn <- find.pK(sweep_stats) 
+    optimal.pk <- bcmvn %>% 
+      filter(BCmetric == max(BCmetric)) %>%
+      select(pK)
     
-    # Output directory per layer
-    out_dir <- file.path(out_dir, layer_name)
-    dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+    annotations <- sample@meta.data$seurat_clusters
+    homotypic.prop <- modelHomotypic(annotations)
     
-    # Run DoubletFind, capture returned object and get summary_df
+    nExp.poi <- round(multiplet_rate * nrow(sample@meta.data))
+    nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop))
+    
     seurat_obj <- DoubletFind(
       object = seurat_obj,
       dr = dr,
@@ -50,10 +50,10 @@ runDoubletDetection <- function(
       epsilon = epsilon,
       pN = pN,
       out_dir = out_dir,
-      cluster = cluster_col
+      cluster = clusters
     )
     
-    # Extract the summary file you wrote inside DoubletFind
+
     summary_file <- file.path(out_dir, "doublet_cluster_stats.tsv")
     if (file.exists(summary_file)) {
       summary_df <- read.table(summary_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
