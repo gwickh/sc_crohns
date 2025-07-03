@@ -1,8 +1,8 @@
 # .Rprofile
 
 # Set static variables
-SCRIPT_DIR <- "sc_crohns/clustering"
-SEURAT_OBJECT_PATH <- "project-area/data/crohns_scrnaseq/clustering_output"
+SCRIPT_DIR <- "sc_crohns/seurat_clustering"
+SEURAT_OBJECT_PATH <- "project-area/data/crohns_scrnaseq/seurat_clustering_output"
 MATRIX_DIR <- "project-area/data/crohns_scrnaseq/crohns_samples"
 
 # Set clustering parameters
