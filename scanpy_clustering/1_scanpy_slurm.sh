@@ -17,10 +17,11 @@ OUT_DIR="$2"
 # Create output directory if it doesn't exist
 mkdir -p "${OUT_DIR}"
 
-source /hpc-home/yep25yan/mamba/etc/profile.d/conda.sh
-conda activate r_env
+source ~/.bashrc
+conda activate python_scripts
 scripts=(
     "1a_scanpy_load_matrices.py"
+    "1b_scanpy_PCA.py"
 )
 
 for script in "${scripts[@]}"; do
