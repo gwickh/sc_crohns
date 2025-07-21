@@ -3,7 +3,7 @@ MIN_CELLS <- 3
 MIN_FEATURES <- 200
 VARS_TO_REGRESS <- c("S.Score", "G2M.Score") # Default should be NULL
 
-source(file.path("sc_crohns/clustering", ".Rprofile"))
+source(file.path("sc_crohns/seurat_clustering", ".Rprofile"))
 
 if (file.exists(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))) {
   print("seurat_object already created, skipping")
@@ -44,8 +44,6 @@ for (i in seq_along(matrix_paths)) {
     min.cells = MIN_CELLS,
     min.features = MIN_FEATURES
   )
-  
-  
   
   # Add sample metadata
   seurat_obj$sample_id <- sample
@@ -97,3 +95,4 @@ merged <- ScaleData(
 
 # Write out
 saveRDS(merged, file = file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
+saveRDS(merged, file = file.path(SEURAT_OBJECT_PATH, "seurat_object_raw.Rds"))
