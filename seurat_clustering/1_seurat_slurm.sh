@@ -4,8 +4,8 @@
 #SBATCH --job-name=seurat_cluster
 #SBATCH --output=1_clustering_%j.SLURM.stdout
 #SBATCH --error=1_clustering_%j.SLURM.stderr
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=128G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-long
@@ -23,7 +23,7 @@ scripts=(
     "1a_seurat_load_matrices.R"
     "1b_seurat_PCA.R"
     "1c_seurat_clustering.R"
-    "1c_filter_doublets.R"
+    # "1c_filter_doublets.R"
     "1d_seurat_cluster_comp.R"
     "1e_seurat_UMAP.R"
 )
