@@ -5,12 +5,12 @@
 #SBATCH --output=1_clustering_%j.SLURM.stdout
 #SBATCH --error=1_clustering_%j.SLURM.stderr
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=256G
+#SBATCH --mem=128GB
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-long
+#SBATCH --partition=ei-medium
 
-# Arguments
+# Argumentsß
 SCRIPT_DIR="$1"
 OUT_DIR="$2"
 

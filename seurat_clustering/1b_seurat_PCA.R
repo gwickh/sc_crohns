@@ -1,4 +1,4 @@
-source(file.path("sc_crohns/clustering", ".Rprofile"))
+source(file.path("sc_crohns/seurat_clustering", ".Rprofile"))
 
 if (!exists("seurat_object")) {
   seurat_object <- readRDS(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))

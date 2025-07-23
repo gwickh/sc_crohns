@@ -1,4 +1,4 @@
-source(file.path("sc_crohns/clustering", ".Rprofile"))
+source(file.path("sc_crohns/seurat_clustering", ".Rprofile"))
 CLUSTERING_OUTPUT_PATH <- file.path(SEURAT_OBJECT_PATH, "clustering_stats")
 
 UMAP_PATH <- file.path(SEURAT_OBJECT_PATH, "UMAP_plots")

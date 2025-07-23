@@ -1,5 +1,5 @@
 # Load dependencies and environment
-source(file.path("sc_crohns/clustering", ".Rprofile"))
+source(file.path("sc_crohns/seurat_clustering", ".Rprofile"))
 
 CLUSTERING_OUTPUT_PATH <- file.path(SEURAT_OBJECT_PATH, "clustering_stats")
 dir.create(CLUSTERING_OUTPUT_PATH, showWarnings = FALSE, recursive = TRUE)

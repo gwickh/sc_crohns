@@ -88,9 +88,11 @@ merged <- CellCycleScoring(
 )
 
 # Regress variables
+merged <- FindVariableFeatures(merged)
 merged <- ScaleData(
   merged,
-  vars.to.regress = VARS_TO_REGRESS
+  vars.to.regress = VARS_TO_REGRESS,
+  features = VariableFeatures(merged)
 )
 
 # Write out
