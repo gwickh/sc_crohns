@@ -4,11 +4,11 @@
 #SBATCH --job-name=scanvi_cluster
 #SBATCH --output=4_scanvi_%j.SLURM.stdout
 #SBATCH --error=4_scanvi_%j.SLURM.stderr
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-long
+#SBATCH --partition=ei-medium
 
 # Arguments
 SCRIPT_DIR="$1"
@@ -20,7 +20,8 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    "4c_scanvi.py"
+    # "4a_scvi_ref.py"
+    "4b_scanvi_ref.py"
 )
 
 for script in "${scripts[@]}"; do
