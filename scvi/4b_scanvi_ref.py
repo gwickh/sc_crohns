@@ -10,6 +10,7 @@ adata_ref = sc.read_h5ad(os.path.join(PATH, "gca_ref_scvi.h5ad"))
 vae_ref = scvi.model.SCVI.load(os.path.join(PATH, "scvi_model_ref"), adata=adata_ref)
 
 label = "category"
+print(adata_ref.obs[label].values)
 adata_ref.obs["labels_scanvi"] = adata_ref.obs[label].values
 
 vae_ref_scanvi = scvi.model.SCANVI.from_scvi_model(
