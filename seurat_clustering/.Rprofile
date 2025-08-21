@@ -7,8 +7,8 @@ MATRIX_DIR <- "project-area/data/crohns_scrnaseq/crohns_samples"
 
 # Set clustering parameters
 disps <- c(0.25, 0.5, 0.75, 1)
-n_features <- c(500, 1000, 2000, 3000)
-res <- c(0.2, 0.5, 0.8, 1.0, 1.2)
+n_features <- c(500, 1000, 2000, 3000, 5000)
+res <- c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2)
 neighbors <- c(10, 20, 30, 50)
 
 # Set CRAN mirror
