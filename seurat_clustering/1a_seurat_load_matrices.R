@@ -20,6 +20,8 @@ matrix_paths <- list.files(
   full.names = TRUE
 )
 
+print(matrix_paths)
+
 sample_names <- basename(dirname(dirname(matrix_paths)))
 
 # Load matrices into Seurat object
