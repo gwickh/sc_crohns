@@ -15,9 +15,9 @@ neighbors <- c(10, 20, 30, 50)
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Load required packages
-pkgs <- c("Seurat", "tidyverse", "Matrix", "hdf5r", "future", "future.apply", 
-          "parallel", "cluster", "parallelDist", "factoextra", "cowplot", 
-          "patchwork", "DoubletFinder")
+pkgs <- c("Seurat", "devtools", "presto", "tidyverse", "Matrix", "hdf5r", "future", "future.apply", 
+          "parallel", "cluster", "parallelDist", "factoextra", "cowplot", "patchwork", "DoubletFinder",
+           "ggrepel")
 
 for (pkg in pkgs) {
   if (!require(pkg, quietly = TRUE, character.only = TRUE)) {

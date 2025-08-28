@@ -8,7 +8,7 @@ TOP_DEG <- 50
 GENES_EXCLUDE <- NULL
 CORES <- 8
 CL_MODE <- "clusters_pca_vst_top_5000_k_30_res_1.1"
-TEST <- "MAST"
+TEST <- "wilcox"
 
 source(file.path("sc_crohns/seurat_clustering", ".Rprofile"))
 source(file.path("sc_crohns/seurat_clustering", "2_dea_functions.R"))
@@ -18,7 +18,7 @@ dir.create(DEA_OUT_DIR, showWarnings = FALSE)
 
 if (!exists("seurat_object")) {
   print("Loading seurat object")  # print to stdout
-  seurat_object <- readRDS(file.path(SEURAT_OBJECT_PATH, "seurat_object_unf_clustered.Rds"))
+  seurat_object <- readRDS(file.path(SEURAT_OBJECT_PATH, "seurat_object.Rds"))
 }
 
 # Check if CL_MODE exists in seurat_object@meta.data

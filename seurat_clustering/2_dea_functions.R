@@ -248,6 +248,102 @@ HeatmapPlot <- function(
 
 
 # --------------------- FUNCTION: Generate volcano plot ----------------------
+VolcanoPlot <- function(
+  all.table,
+  color.genes = NULL,
+  label.genes = NULL,
+  plot.name,
+  title = "",
+  subtitle = "",
+  group.name = "top50sign",
+  revert = FALSE,
+  genes.use = NULL,
+  genes.filter = NULL,
+  colors = c("gray", "blue"),
+  point.size = 1
+) {
+  stopifnot(file.exists(all.table))
+  all <- read.table(all.table, sep = "\t", header = TRUE, check.names = FALSE)
+
+  # Optional gene filters
+  if (!is.null(genes.use))    all <- all[all$geneID %in% genes.use, , drop = FALSE]
+  if (!is.null(genes.filter)) all <- all[!(all$geneID %in% genes.filter), , drop = FALSE]
+  if (nrow(all) == 0) { warning("No rows to plot after filtering."); return(invisible(NULL)) }
+
+  # Orientation
+  if (revert) all$avg_log2FC <- -all$avg_log2FC
+
+  # P-value safety: avoid -Inf in -log10
+  bad_p <- !is.finite(all$p_val_adj) | all$p_val_adj <= 0
+  if (any(bad_p)) all$p_val_adj[bad_p] <- 1e-300
+
+  # Finite FCs and bounds
+  finite_fc <- is.finite(all$avg_log2FC)
+  if (any(finite_fc)) {
+    maxFC <- max(all$avg_log2FC[finite_fc], na.rm = TRUE)
+    minFC <- min(all$avg_log2FC[finite_fc], na.rm = TRUE)
+  } else {
+    maxFC <- 1; minFC <- -1
+  }
+
+  # Replace +/-Inf
+  inf_pos <- !finite_fc & all$avg_log2FC > 0
+  inf_neg <- !finite_fc & all$avg_log2FC < 0
+  if (any(inf_pos)) all$avg_log2FC[inf_pos] <- maxFC
+  if (any(inf_neg)) all$avg_log2FC[inf_neg] <- minFC
+
+  # Build plotting frame
+  df <- data.frame(
+    x = all$avg_log2FC,
+    y = -log10(all$p_val_adj),
+    z = all$geneID,
+    stringsAsFactors = FALSE
+  )
+  in_group <- if (is.null(color.genes)) rep(FALSE, nrow(df)) else df$z %in% color.genes
+  to_label <- if (is.null(label.genes)) rep(FALSE, nrow(df)) else df$z %in% label.genes
+
+  df$type <- factor(ifelse(in_group, group.name, "nogroup"), levels = c("nogroup", group.name))
+  df$lab  <- ifelse(to_label, "lab", "notlab")
+
+  # Axis limits (symmetric)
+  maxabsFC <- max(abs(c(minFC, maxFC)), na.rm = TRUE)
+  if (!is.finite(maxabsFC) || maxabsFC == 0) {
+    maxabsFC <- max(abs(df$x), na.rm = TRUE)
+    if (!is.finite(maxabsFC) || maxabsFC == 0) maxabsFC <- 1
+  }
+
+  # Plot
+  pdf(plot.name, width = 6.5, height = 7)
+  on.exit(dev.off(), add = TRUE)
+
+  suppressPackageStartupMessages({
+    library(ggplot2); library(ggrepel)
+  })
+
+  g <- ggplot(df, aes(x = x, y = y, color = type)) +
+    theme_bw() +
+    xlab(expression(log[2](FC))) +
+    ylab(expression(-log[10](FDR))) +
+    xlim(-maxabsFC, maxabsFC) +
+    geom_point(size = point.size) +
+    ggtitle(label = title, subtitle = subtitle) +
+    theme(plot.title = element_text(size = 20),
+          plot.subtitle = element_text(size = 10),
+          text = element_text(size = 15),
+          legend.position = "none")
+
+  if (length(colors) >= 2) {
+    g <- g + scale_color_manual(values = colors[1:2])
+  }
+
+  if (any(to_label)) {
+    g <- g + geom_text_repel(data = df[to_label, , drop = FALSE], aes(label = z), color = "black")
+  }
+
+  print(g)
+  invisible(NULL)
+}
+
 VolcanoPlotFilter <- function(
   all.table, 
   filt.table, 
