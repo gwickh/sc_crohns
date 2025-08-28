@@ -8,7 +8,7 @@
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-long
 
 # Arguments
 SCRIPT_DIR="$1"
@@ -22,6 +22,8 @@ conda activate python_scripts
 scripts=(
     # "4a_scvi_ref.py"
     "4b_scanvi_ref.py"
+    "4c_scanvi_query.py"
+    "4d_scanpy_clustering.py"
 )
 
 for script in "${scripts[@]}"; do
