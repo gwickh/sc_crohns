@@ -4,11 +4,11 @@
 #SBATCH --job-name=scanvi_cluster
 #SBATCH --output=4_scanvi_%j.SLURM.stdout
 #SBATCH --error=4_scanvi_%j.SLURM.stderr
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=256G
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=128G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-long
+#SBATCH --partition=ei-short
 
 # Arguments
 SCRIPT_DIR="$1"
@@ -21,9 +21,10 @@ source ~/.bashrc
 conda activate python_scripts
 scripts=(
     # "4a_scvi_ref.py"
-    "4b_scanvi_ref.py"
-    "4c_scanvi_query.py"
-    "4d_scanpy_clustering.py"
+    # "4b_scanvi_ref.py"
+    # "4c_scanvi_query.py"
+    # "4d_scanpy_clustering.py"
+    "4e_celltype_similarity_matrix.py"
 )
 
 for script in "${scripts[@]}"; do
