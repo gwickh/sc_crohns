@@ -4,9 +4,9 @@ import os
 
 scvi.settings.seed = 0 
 
-PATH = "project-area/data/crohns_scrnaseq/scvi_tools_output/"
+PATH = "project-area/data/crohns_scrnaseq/scvi_tools_output/category_label"
 
-adata_ref = sc.read_h5ad(os.path.join(PATH, "gca_ref_scvi.h5ad"))
+adata_ref = sc.read_h5ad(os.path.join(PATH, "../gca_ref_scvi.h5ad"))
 vae_ref = scvi.model.SCVI.load(os.path.join(PATH, "scvi_model_ref"), adata=adata_ref)
 
 label = "Integrated_05" # "category" 
