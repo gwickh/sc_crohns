@@ -10,6 +10,8 @@
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-short
 
+# Usage: sbatch sc_crohns/scvi/4_scanvi_slurm.sh sc_crohns/scvi/ project-area/data/crohns_scrnaseq/scvi_tools_output/
+
 # Arguments
 SCRIPT_DIR="$1"
 OUT_DIR="$2"
@@ -24,7 +26,8 @@ scripts=(
     # "4b_scanvi_ref.py"
     # "4c_scanvi_query.py"
     # "4d_scanpy_clustering.py"
-    "4e_celltype_similarity_matrix.py"
+    # "4e_celltype_similarity_matrix.py"
+    "4f_curated_celltype_clustering.py"
 )
 
 for script in "${scripts[@]}"; do
