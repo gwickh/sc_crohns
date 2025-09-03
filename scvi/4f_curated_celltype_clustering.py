@@ -179,9 +179,11 @@ map_curated = {
     "Tuft": "Progenitor epithelial",
 }
 
-# reassign labels
+# reassign labels and save
 adata.obs["category"] = adata.obs["Integrated_05"].map(map_category)
 adata.obs["curated"]  = adata.obs["Integrated_05"].map(map_curated)
+
+adata.write_h5ad(os.path.join(PATH, "query_concat_curated.h5ad"))
 
 # Joint UMAP on Integrated_05
 diseased_samples = ["C_03", "C_08", "C_13"]
