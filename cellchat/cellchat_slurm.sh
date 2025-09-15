@@ -10,7 +10,7 @@
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-short
 
-# Usage: sbatch sc_crohns/cellchat/cellchat.sh sc_crohns/cellchat/ project-area/data/crohns_scrnaseq/cellchat_output/
+# Usage: sbatch sc_crohns/cellchat/cellchat_slurm.sh sc_crohns/cellchat/ project-area/data/crohns_scrnaseq/cellchat_output/
 
 # Arguments
 SCRIPT_DIR="$1"
