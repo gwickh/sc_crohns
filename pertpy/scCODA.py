@@ -33,7 +33,7 @@ mdata = scc.prepare(
     mdata,
     modality_key="coda",
     formula="Diagnosis",      
-    reference_cell_type="Endothelial"
+    reference_cell_type="Mesenchymal"
 )
 
 # fit model
