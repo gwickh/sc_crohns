@@ -7,7 +7,7 @@ import os
 PATH = "project-area/data/crohns_scrnaseq/scvi_tools_output/Integrated_05_label" 
 OUTPATH = PATH + "/../../pertpy_output"
 
-ref_name = "Endothelial"
+ref_name = "Mesenchymal"
 
 # Load data
 df = pd.read_csv(os.path.join(OUTPATH, "category_log2fc_df.csv"))
@@ -35,7 +35,7 @@ x_lo = df["log2FC_HDI_low"].to_numpy()
 x_hi = df["log2FC_HDI_high"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.45*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
@@ -89,7 +89,7 @@ x_lo = df["HDI 3%"].to_numpy()
 x_hi = df["HDI 97%"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.45*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
@@ -158,7 +158,7 @@ x_lo = df["log2FC_HDI_low"].to_numpy()
 x_hi = df["log2FC_HDI_high"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.45*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
@@ -216,7 +216,7 @@ x_lo = df["HDI 3%"].to_numpy()
 x_hi = df["HDI 97%"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.45*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
