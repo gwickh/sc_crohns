@@ -21,6 +21,15 @@ mask = adata.obs[label].isin(keep_labels)
 
 adata = adata[mask].copy()
 
+# count number of cells in crohn's disease and normal
+diseased_samples = ["C_03", "C_08", "C_13"]
+
+num_diseased_cells = adata[adata.obs["sample_id"].isin(diseased_samples)].shape[0]
+num_normal_cells = adata[~adata.obs["sample_id"].isin(diseased_samples)].shape[0]
+
+print(f"Number of cells in Crohn's Disease: {num_diseased_cells}")
+print(f"Number of cells in Normal: {num_normal_cells}")
+
 # mapping dicts
 print("mapping dicts")
 map_category = {
