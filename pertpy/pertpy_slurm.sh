@@ -22,8 +22,9 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    "scCODA.py"
-    "scCODA_visualisations.py"
+    # "1a_scCODA_fit.py"
+    # "1b_scCODA_visualisations.py"
+    "2a_milo_train.py"
 )
 
 for script in "${scripts[@]}"; do
