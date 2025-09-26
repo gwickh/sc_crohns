@@ -3,57 +3,66 @@ library(Matrix)
 library(CellChat)
 library(patchwork)
 library(igraph)
+library(future)
+
+options(future.globals.maxSize = 16 * 1024^3) 
 options(stringsAsFactors = FALSE)
 
 # Vars
 path <- "project-area/data/crohns_scrnaseq/scvi_tools_output/"
-h5seurat_path <- file.path(path, "Integrated_05_label/query_concat_curated.h5seurat")
+rds_path <- file.path(path, "Integrated_05_label/query_concat_curated.Rds")
 label_column <- c("curated", "category")
+outdir <- "project-area/data/crohns_scrnaseq/cellchat_output/"
 
-h5seurat_file <- readH5Seurat(h5seurat_path)
+# load file
+seurat_file <- readRDS(rds_path)
 
-data.input <- h5seurat_file[["RNA"]]$data # normalized data matrix
-labels <- Idents(h5seurat_file)
-meta <- data.frame(labels = labels, row.names = names(labels)) # create a dataframe of the cell labels
+# check data structure
+print("class")
+class(seurat_file) 
 
-cellChat <- createCellChat(object = h5seurat_file, group.by = "ident", assay = "RNA")
+print("Assays")
+Assays(seurat_file)
 
-# # Run CellChat
-# data.use <- GetAssayData(seu, assay = "RNA", slot = "data")
-# meta <- data.frame(group = Idents(seu))
-# rownames(meta) <- colnames(seu)
+print("DefaultAssay")
+DefaultAssay(seurat_file) 
 
-# cellchat <- createCellChat(
-#   object = data.use,
-#   meta = meta,
-#   group.by = label_column
-# )
+print("slotNames")
+slotNames(seurat_file[["originalexp"]])
 
-# data(CellChatDB.human)
-# cellchat@DB <- CellChatDB.human
-# data(PPI.human)
-# PPI.use <- PPI.human
+# rename assays
+seurat_file <- RenameAssays(seurat_file, originalexp = "RNA")
+DefaultAssay(seurat_file) <- "RNA"
+colnames(seurat_file@meta.data)[colnames(seurat_file@meta.data) == "sample_id"] <- "samples"
+
+# create cellchat object
+cellChat <- createCellChat(object = seurat_file, group.by = "category", assay = "RNA")
+
+# set DB
+CellChatDB <- CellChatDB.human 
+CellChatDB.use <- CellChatDB
+cellChat@DB <- CellChatDB.use
+cellChat <- subsetData(cellChat)
+
+# Identify overexpressed genes and interactions
+future::plan("multisession", workers = 4)
+
+cellChat <- identifyOverExpressedGenes(cellChat)
+cellChat <- identifyOverExpressedInteractions(cellChat)
+cellChat <- smoothData(cellChat, adj = PPI.human)
+
+# Compute the communication probability
+cellChat <- computeCommunProb(cellChat, raw.use = FALSE, type = "triMean")
+cellChat <- filterCommunication(cellChat, min.cells = 10)
+
+# Infer the cell-cell communication at a signaling pathway level
+cellChat <- computeCommunProbPathway(cellChat)
+cellChat <- aggregateNet(cellChat)
+cellChat <- netAnalysis_computeCentrality(cellChat, slot.name = "net")
+
+# save cellchat object and visualisations
+saveRDS(cellChat, file.path(outdir, "cellchat_object.rds"))
 
 
-# cellchat <- subsetData(cellchat)
-# future::plan("multisession", workers = 4)
 
-# cellchat <- identifyOverExpressedGenes(cellchat)
-# cellchat <- identifyOverExpressedInteractions(cellchat)
-# cellchat <- projectData(cellchat, PPI.use)
-# cellchat <- computeCommunProb(cellchat)
-# cellchat <- filterCommunication(cellchat, min.cells = 10)
-# cellchat <- computeCommunProbPathway(cellchat)
-# cellchat <- aggregateNet(cellchat)
-# cellchat <- netAnalysis_computeCentrality(cellchat, slot.name = "netP")
 
-# # save cellchat object and visualisations
-# saveRDS(cellchat, file.path(outdir, "cellchat_object.rds"))
-
-# pdf(file.path(outdir, "bubble_top_pathways.pdf"))
-# netVisual_bubble(cellchat, remove.isolate = TRUE)
-# dev.off()
-
-# pdf(file.path(outdir, "heatmap_overall.pdf"))
-# netVisual_heatmap(cellchat, measure = "weight")
-# dev.off()
