@@ -55,7 +55,7 @@ run_cellchat = function(celltypes) {
         cellChat <- identifyOverExpressedInteractions(cellChat)
 
         # Compute the communication probability
-        cellChat <- computeCommunProb(cellChat, raw.use = TRUE, trim = NULL, type = "triMean")
+        cellChat <- computeCommunProb(cellChat, trim = NULL, type = "triMean")
         cellChat <- filterCommunication(cellChat, min.cells = 10)
 
         # Infer the cell-cell communication at a signaling pathway level
