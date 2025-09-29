@@ -8,7 +8,7 @@
 #SBATCH --mem=128G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-short
+#SBATCH --partition=ei-medium
 
 # Usage: sbatch sc_crohns/cellchat/cellchat_slurm.sh sc_crohns/cellchat/ project-area/data/crohns_scrnaseq/cellchat_output/
 
@@ -22,7 +22,8 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate r_env
 scripts=(
-    "cellchat.R"
+    "1a_cellchat_calculate_interactions.R"
+    # "1b_cellchat_compare.R"
 )
 
 for script in "${scripts[@]}"; do
