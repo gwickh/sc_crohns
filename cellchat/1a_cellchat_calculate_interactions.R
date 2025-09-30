@@ -62,6 +62,7 @@ run_cellchat = function(celltypes) {
         cellChat <- computeCommunProbPathway(cellChat)
         cellChat <- aggregateNet(cellChat)
         cellChat <- netAnalysis_computeCentrality(cellChat, slot.name = "netP")
+        cellChat <- netAnalysis_computeCentrality(cellChat, slot.name = "net")
 
         # save cellchat object and visualisations
         saveRDS(cellChat, file.path(outdir, paste0("cellchat_object_", celltypes, "_", samp, ".Rds")))
