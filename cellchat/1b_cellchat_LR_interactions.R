@@ -43,8 +43,8 @@ for (pw in levels(cellchat_merged@idents$joint)) {
     show.legend = TRUE
   )
   plots[[pw]] <- gg1
-  count <- length(levels(gg1@data$interaction_name_2))
-  pdf(file.path(path, paste0(pw, "_LRs_category.pdf")), width = 6, height = count * 0.27)
+  h <- max(4, 1.25 + length(levels(gg1@data$interaction_name_2)) * 0.2)
+  pdf(file.path(path, paste0(pw, "_LRs_category.pdf")), width = 6, height = h)
   print(gg1)
   dev.off()
 }
