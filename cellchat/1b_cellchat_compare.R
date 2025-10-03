@@ -115,15 +115,14 @@ plot_pathways_heatmap("crohns_LR_pairs_heatmap", cellchat.crohns, "net")
 plot_pathways_heatmap("normal_LR_pairs_heatmap", cellchat.normal, "net")
 
 
-# dotplot -----------------------------------------------------------------
-selectK(cellchat.normal, pattern = "outgoing") # 6 patterns
-selectK(cellchat.normal, pattern = "incoming") # 7 patterns
-selectK(cellchat.crohns, pattern = "outgoing") # 5 patterns
-selectK(cellchat.crohns, pattern = "incoming") # 7 patterns
+# dotplots -----------------------------------------------------------------
+selectK(cellchat.normal, pattern = "outgoing") # 5 patterns
+selectK(cellchat.normal, pattern = "incoming") # 6 patterns
+selectK(cellchat.crohns, pattern = "outgoing") # 8 patterns
+selectK(cellchat.crohns, pattern = "incoming") # 6 patterns
 
 plot_pathways_dotplot <- function(filename, cellchat_obj, k_in, k_out) {
-  pdf(file.path(path, paste0(filename, "_higher_order.pdf")), width = 10, height = 12)
-  
+  pdf(file.path(path, paste0(filename, "_outgoing_higher_order.pdf")), width = 10, height = 10)
   cellchat.out <- identifyCommunicationPatterns(
     cellchat_obj, 
     pattern = "outgoing", 
@@ -131,11 +130,9 @@ plot_pathways_dotplot <- function(filename, cellchat_obj, k_in, k_out) {
     width = 4,
     height = 15
   )
-  gg1 <- netAnalysis_dot(
-    cellchat.out, 
-    pattern = "outgoing"
-  )
+  dev.off()
   
+  pdf(file.path(path, paste0(filename, "_incoming_higher_order.pdf")), width = 10, height = 10)
   cellchat.in <- identifyCommunicationPatterns(
     cellchat_obj, 
     pattern = "incoming", 
@@ -143,51 +140,23 @@ plot_pathways_dotplot <- function(filename, cellchat_obj, k_in, k_out) {
     width = 4,
     height = 15
   )
+  dev.off()
+  
+  gg1 <- netAnalysis_dot(
+    cellchat.out, 
+    pattern = "outgoing"
+  )
   gg2 <- netAnalysis_dot(
     cellchat.in, 
     pattern = "incoming"
   )
-  (gg1 | gg2) + plot_layout(widths = c(1,1))
+  pdf(file.path(path, paste0(filename, "_pathways_dotplot.pdf")), width = 24, height = 6)
+  print((gg1 + gg2) + plot_layout(widths = c(1,1)))
   dev.off()
 }
 
 plot_pathways_dotplot("normal_interactions", cellchat.normal, 6, 5)
-plot_pathways_dotplot("crohns_interactions", cellchat.crohns, 6, 5)
-
-# dotplots
-cellchat.normal_out <- identifyCommunicationPatterns(
-  cellchat.normal, 
-  pattern = "outgoing", 
-  k = 5
-)
-cellchat.normal_in <- identifyCommunicationPatterns(
-  cellchat.normal, 
-  pattern = "incoming", 
-  k = 6
-)
-
-pdf(file.path(path, "normal_pathways_dotplot.pdf"), width = 24, height = 6)
-gg1 <- netAnalysis_dot(cellchat.normal_out, pattern = "outgoing")
-gg2 <- netAnalysis_dot(cellchat.normal_in, pattern = "incoming")
-(gg1 | gg2) + plot_layout(widths = c(1,1))
-dev.off()
-
-cellchat.crohns_out <- identifyCommunicationPatterns(
-  cellchat.crohns, 
-  pattern = "outgoing", 
-  k = 5
-)
-cellchat.crohns_in <- identifyCommunicationPatterns(
-  cellchat.crohns, 
-  pattern = "incoming", 
-  k = 6
-)
-
-pdf(file.path(path, "crohns_pathways_dotplot.pdf"), width = 24, height = 6)
-gg1 <- netAnalysis_dot(cellchat.crohns_out, pattern = "outgoing")
-gg2 <- netAnalysis_dot(cellchat.crohns_in, pattern = "incoming")
-(gg1 | gg2) + plot_layout(widths = c(1,1))
-dev.off()
+plot_pathways_dotplot("crohns_interactions", cellchat.crohns, 6, 8)
 
 # manifold learning
 pdf(file.path(path, "UMAP.pdf"), width = 10, height = 6)
