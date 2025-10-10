@@ -7,6 +7,7 @@ library(future)
 library(NMF)
 library(ggalluvial)
 library(ComplexHeatmap)
+library(scales)
 
 options(stringsAsFactors = FALSE)
 
@@ -220,8 +221,6 @@ gg1 + gg2
 dev.off()
 
 # identify significant interactions
-
-
 get_enriched_interactions <- function(filename, cellchat_obj) {
   cellchat_obj <- rankNetPairwise(cellchat_obj)
   enriched_interactions <- list()
@@ -264,3 +263,130 @@ get_enriched_interactions <- function(filename, cellchat_obj) {
 
 get_enriched_interactions("crohns", cellchat.crohns)
 get_enriched_interactions("normal", cellchat.normal)
+
+
+# networks ----------------------------------------------------------------
+draw_color_legend <- function(
+    x = 0, y = 0.5, height = 0.5, width = 0.1,
+    col = colorRampPalette(c("blue", "red"))(100),
+    labels = c("Minimum", "Maximum"),
+    title = "Comm. Prob.") {
+  
+  n <- length(col)
+  y_seq <- seq(y, y + height, length.out = n + 1)
+  
+  for (i in 1:n) {
+    rect(x, y_seq[i], x + width, y_seq[i + 1], col = col[i], border = NA)
+  }
+  
+  # Labels
+  text(x + width + 0.05, y, labels[1], adj = 0, cex = 0.8)
+  text(x + width + 0.05, y + height, labels[2], adj = 0, cex = 0.8)
+  text(x + width + 0.05, y + height / 2, title, srt = 90, adj = 0.5, font = 2, cex = 0.9)
+}
+
+# Network plot generator
+generate_network <- function() {
+  pathways_crohns <- cellchat_merged@netP$Crohns[1]$pathways
+  pathways_normal <- cellchat_merged@netP$Normal[1]$pathways
+  pathways <- unique(c(pathways_crohns, pathways_normal))
+  
+  for (pathway in pathways) {
+    comms_crohns <- try(subsetCommunication(cellchat.crohns, slot.name = "netP", signaling = pathway), silent = TRUE)
+    comms_normal <- try(subsetCommunication(cellchat.normal, slot.name = "netP", signaling = pathway), silent = TRUE)
+    
+    # Skip pathway if no interactions in either
+    if ((inherits(comms_crohns, "try-error") || nrow(comms_crohns) < 1) &&
+        (inherits(comms_normal, "try-error") || nrow(comms_normal) < 1)) {
+      next
+    }
+    
+    # Construct edge lists
+    edges1 <- if (!inherits(comms_crohns, "try-error") && nrow(comms_crohns) > 0) {
+      df <- comms_crohns[, c("source", "target", "prob")]
+      colnames(df) <- c("from", "to", "weight")
+      df
+    } else {
+      data.frame(from = character(0), to = character(0), weight = numeric(0))
+    }
+    
+    edges2 <- if (!inherits(comms_normal, "try-error") && nrow(comms_normal) > 0) {
+      df <- comms_normal[, c("source", "target", "prob")]
+      colnames(df) <- c("from", "to", "weight")
+      df
+    } else {
+      data.frame(from = character(0), to = character(0), weight = numeric(0))
+    }
+    
+    # Common node set
+    all_nodes <- union(c(edges1$from, edges1$to), c(edges2$from, edges2$to))
+    gr1 <- graph_from_data_frame(edges1, directed = TRUE, vertices = data.frame(name = all_nodes))
+    gr2 <- graph_from_data_frame(edges2, directed = TRUE, vertices = data.frame(name = all_nodes))
+    
+    layout_fixed <- layout_with_fr(gr1)
+    
+    # Edge widths (scaled)
+    E(gr1)$width <- if (ecount(gr1) > 0) rescale(E(gr1)$weight, to = c(1, 6)) else numeric(0)
+    E(gr2)$width <- if (ecount(gr2) > 0) rescale(E(gr2)$weight, to = c(1, 6)) else numeric(0)
+    
+    # Edge colors
+    edge_colors <- colorRampPalette(c("blue", "red"))(100)
+    if (ecount(gr1) > 0) {
+      probs1 <- rescale(E(gr1)$weight, to = c(1, 100))
+      E(gr1)$color <- edge_colors[round(probs1)]
+    } else {
+      E(gr1)$color <- NA
+    }
+    
+    if (ecount(gr2) > 0) {
+      probs2 <- rescale(E(gr2)$weight, to = c(1, 100))
+      E(gr2)$color <- edge_colors[round(probs2)]
+    } else {
+      E(gr2)$color <- NA
+    }
+    
+    pdf(file.path(path, paste0("network_", pathway, ".pdf")), width = 14, height = 5)
+    layout(matrix(c(1, 2, 3), nrow = 1), widths = c(1, 1, 0.5))
+    par(mar = c(0, 0, 4, 0), oma = c(0, 0, 3, 0))
+    par(xpd = TRUE)  # allow labels and edges outside bounds
+    
+    # Plot Normal
+    plot(
+      gr2,
+      layout = layout_fixed,
+      vertex.label.cex = 0.8,
+      vertex.label.family = "Helvetica",
+      vertex.size = 20,
+      edge.arrow.size = 1,
+      main = "Normal"
+    )
+    
+    # Plot Crohn's
+    plot(
+      gr1,
+      layout = layout_fixed,
+      vertex.label.cex = 0.8,
+      vertex.label.family = "Helvetica",
+      vertex.size = 20,
+      edge.arrow.size = 1,
+      main = "Crohn's Disease"
+    )
+    
+    # Legend panel
+    plot.new()
+    draw_color_legend()
+    
+    # Main title
+    mtext(
+      paste0(pathway, " Communication Network"),
+      outer = TRUE,
+      cex = 1.2,
+      line = 1.5,
+      adj = 0.35
+    )
+    
+    dev.off()
+  }
+}
+
+generate_network()
