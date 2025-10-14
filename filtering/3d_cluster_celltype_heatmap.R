@@ -13,16 +13,6 @@ seurat_obj <- readRDS(rds_path)
 seurat_obj[["RNA"]] <- seurat_obj[["originalexp"]]
 DefaultAssay(seurat_obj) <- "RNA"
 
-
-seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 1e4)
-seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 5000)
-seurat_obj <- ScaleData(seurat_obj)
-seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(seurat_obj))
-seurat_obj <- RunUMAP(seurat_obj, dims = 1:30)
-
-seurat_obj <- FindNeighbors(seurat_obj, dims = 1:24, k.param = 30)
-seurat_obj <- FindClusters(seurat_obj, resolution = 0.9)
-
 category_map <- seurat_obj@meta.data %>%
   group_by(curated, category) %>%
   summarise(n = n(), .groups = "drop_last") %>%
