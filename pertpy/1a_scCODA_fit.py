@@ -99,28 +99,28 @@ if "beta" in post and "covariate" in post["beta"].dims:
 else:
     beta = post["beta"]
 
-# --- Two design points (contrast 0 vs 1) ---
+# Two design points (contrast 0 vs 1)
 eta0 = alpha + beta * 0   # (chain, draw, K)
 eta1 = alpha + beta * 1   # (chain, draw, K)
 
-# --- Softmax instead of inv_alr ---
+# Softmax 
 def softmax(x, axis=-1):
     x = np.asarray(x)
-    x = x - np.max(x, axis=axis, keepdims=True)  # for numerical stability
+    x = x - np.max(x, axis=axis, keepdims=True)
     ex = np.exp(x)
     return ex / ex.sum(axis=axis, keepdims=True)
 
 p0 = softmax(eta0.values, axis=-1)  # (chain, draw, K)
 p1 = softmax(eta1.values, axis=-1)  # (chain, draw, K)
 
-# --- Log2 fold changes ---
+# Log2 fold changes
 eps = 1e-12
 log2fc = np.log2((p1 + eps) / (p0 + eps))  # (chain, draw, K)
 S, K = log2fc.shape[0] * log2fc.shape[1], log2fc.shape[2]
 log2fc_flat = log2fc.reshape(S, K)         # (samples, K)
 
-# --- Mean + manual 95% HDI ---
-def hdi_1d(samples, mass=0.94):
+# Mean + 95% HDI
+def hdi_1d(samples, mass=0.95):
     x = np.sort(np.asarray(samples)); n = x.size
     m = int(np.floor(mass * n))
     if m < 1 or m >= n: return x[0], x[-1]
@@ -131,7 +131,6 @@ means  = log2fc_flat.mean(axis=0)
 hdi_lo = np.array([hdi_1d(log2fc_flat[:, j])[0] for j in range(K)])
 hdi_hi = np.array([hdi_1d(log2fc_flat[:, j])[1] for j in range(K)])
 
-# --- Cell type names come straight from var_names (no appending ref) ---
 cell_types = list(map(str, mod.var_names))
 assert len(cell_types) == K, f"Expected {K} names, got {len(cell_types)}"
 
@@ -226,28 +225,28 @@ if "beta" in post and "covariate" in post["beta"].dims:
 else:
     beta = post["beta"]
 
-# --- Two design points (contrast 0 vs 1) ---
+# contrast 0 vs 1
 eta0 = alpha + beta * 0   # (chain, draw, K)
 eta1 = alpha + beta * 1   # (chain, draw, K)
 
-# --- Softmax instead of inv_alr ---
+# Softmax
 def softmax(x, axis=-1):
     x = np.asarray(x)
-    x = x - np.max(x, axis=axis, keepdims=True)  # for numerical stability
+    x = x - np.max(x, axis=axis, keepdims=True)
     ex = np.exp(x)
     return ex / ex.sum(axis=axis, keepdims=True)
 
 p0 = softmax(eta0.values, axis=-1)  # (chain, draw, K)
 p1 = softmax(eta1.values, axis=-1)  # (chain, draw, K)
 
-# --- Log2 fold changes ---
+# Log2 fold changes
 eps = 1e-12
 log2fc = np.log2((p1 + eps) / (p0 + eps))  # (chain, draw, K)
 S, K = log2fc.shape[0] * log2fc.shape[1], log2fc.shape[2]
 log2fc_flat = log2fc.reshape(S, K)         # (samples, K)
 
-# --- Mean + manual 95% HDI ---
-def hdi_1d(samples, mass=0.94):
+# Mean + 95% HDI
+def hdi_1d(samples, mass=0.95):
     x = np.sort(np.asarray(samples)); n = x.size
     m = int(np.floor(mass * n))
     if m < 1 or m >= n: return x[0], x[-1]
@@ -258,7 +257,6 @@ means  = log2fc_flat.mean(axis=0)
 hdi_lo = np.array([hdi_1d(log2fc_flat[:, j])[0] for j in range(K)])
 hdi_hi = np.array([hdi_1d(log2fc_flat[:, j])[1] for j in range(K)])
 
-# --- Cell type names come straight from var_names (no appending ref) ---
 cell_types = list(map(str, mod.var_names))
 assert len(cell_types) == K, f"Expected {K} names, got {len(cell_types)}"
 
