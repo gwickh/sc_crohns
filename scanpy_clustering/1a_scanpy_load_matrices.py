@@ -3,16 +3,18 @@ from glob import glob
 import anndata as ad
 import scanpy as sc
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # Set paths
 SCRIPT_DIR = "sc_crohns/scanpy_clustering"
 MATRIX_DIR = "project-area/data/crohns_scrnaseq/10c_14n_analysis/crohns_samples"
 
-SCANPY_OBJECT_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy_output"
-os.makedirs(SCANPY_OBJECT_PATH, exist_ok=True)
+OUTPATH = os.path.join("project-area/data/crohns_scrnaseq/10c_14n_analysis", "scanpy", "qc_stats")
+os.makedirs(OUTPATH, exist_ok=True) if not os.path.exists(OUTPATH) else None
 
 # Check if adata_merged already exists, if true then end script
-if os.path.exists(os.path.join(SCANPY_OBJECT_PATH, "adata_merged.h5ad")):
+if os.path.exists(os.path.join(OUTPATH, "adata_merged.h5ad")):
     print("adata_merged already created, skipping")
     exit()
 
@@ -40,11 +42,19 @@ for path, sample in zip(matrix_paths, sample_names):
     ad.raw = ad                                                 # store raw counts
     adata_list.append(ad)
 
-# Compute QC metrics for mitochondrial and ribosomal genes
+# Compute per-sample QC metrics and mitochondrial and ribosomal genes
+qc_list = []
 for sample in adata_list:
-    sample.var["mt"] = sample.var["gene_ids"].str.startswith("MT-")
-    sample.var["ribo"] = sample.var["gene_ids"].str.startswith(("RPS", "RPL"))
+    # Identify mitochondrial and ribosomal genes
+    sample.var["ribo"] = sample.var["gene_name"].str.startswith(("RPS", "RPL"))
+    if sample.var["ribo"].sum() == 0:
+        raise ValueError(f"No ribosomal genes found in {sample.obs['sample_id'][0]}")
+    
+    sample.var["mt"] = sample.var["gene_name"].str.startswith("MT-")
+    if sample.var["mt"].sum() == 0:
+        raise ValueError(f"No mitochondrial genes found in {sample.obs['sample_id'][0]}")
 
+    # Calculate QC metrics
     sc.pp.calculate_qc_metrics(
         sample,
         qc_vars=["mt", "ribo"],
@@ -52,8 +62,31 @@ for sample in adata_list:
         log1p=True
     )
 
-# write cell counts to statistics
-print(ad.obs["sample"].value_counts())
+# Visualize QC metrics across samples
+def qc_violin_plot(adata_list,label, metric):
+    qc_list = []
+    for sample in adata_list:
+        qc_list.append(pd.DataFrame({
+            "Sample ID":    sample.obs["sample_id"].iloc[0],
+            label:          sample.obs[metric]
+        }))
+    df = pd.concat(qc_list)
+    plt.figure(figsize=(12, 5)) 
+    sns.violinplot(data=df, x="Sample ID", y=label, cut=0, inner="quart")
+    plt.xticks(rotation=90)
+
+    plt.savefig(os.path.join(OUTPATH, f"qc_plot_{metric}_raw.png"), dpi=300, bbox_inches="tight")
+
+qc_dict = {
+    "Number of genes": "n_genes_by_counts", 
+    "Total read count": "total_counts",
+    "Log10 total read count": "log1p_total_counts",
+    "Percent mitochondrial reads": "pct_counts_mt",
+    "Percent ribosomal reads": "pct_counts_ribo",
+}
+
+for label, metric in qc_dict.items():
+    qc_violin_plot(adata_list, label, metric)
 
 
 # # Set static variables
