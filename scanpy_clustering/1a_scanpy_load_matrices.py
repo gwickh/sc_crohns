@@ -4,6 +4,7 @@ import anndata as ad
 import scanpy as sc
 import pandas as pd
 import numpy as np
+from scipy.stats import median_abs_deviation
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -64,41 +65,58 @@ for sample in adata_list:
     )
 
 # Visualize QC metrics across samples
-def qc_plots(adata_list, qc_dict):
-    for label, metric in qc_dict.items():
-        qc_list = []
-        for sample in adata_list:
-            qc_list.append(
-                pd.DataFrame({
-                    "Sample ID":            sample.obs["sample_id"].iloc[0],
-                    label:                  sample.obs[metric],
-                    "Log10(cell count)":    np.repeat(np.log10(sample.n_obs), sample.n_obs),
-                    "Diagnosis":            "Crohn's Disease" if "Crohns" in sample.obs["sample_id"].iloc[0] 
-                                                else "Normal"
-                })
-            )
-        df = pd.concat(qc_list)
+def obtain_metrics(adata_list, qc_dict) -> pd.DataFrame:
+    """Return long-format QC metrics for all samples."""
+    
+    rows = []
 
-        # Plot boxplots plots for each metric
+    for label, metric in qc_dict.items():
+        for sample in adata_list:
+            
+            sample_id = sample.obs["sample_id"].iloc[0]
+            diagnosis = "Crohn's Disease" if "Crohns" in sample_id else "Normal"
+            
+            values = sample.obs[metric].values
+
+            rows.append(pd.DataFrame({
+                "Sample ID": sample_id,
+                "Diagnosis": diagnosis,
+                "Metric": label,
+                "Value": values,
+                "Log10(cell count)": np.log10(sample.n_obs)
+            }))
+
+    return pd.concat(rows, ignore_index=True)
+
+def qc_plots(metrics_df, qc_dict, stage="") -> None:
+    """
+    Plot QC metrics across samples
+    """
+
+    for label, metric in qc_dict.items():
+        metric_df = metrics_df[metrics_df["Metric"] == label]
+        # Plot violins over each metric
         plt.figure(figsize=(12, 5)) 
         sns.violinplot(
-            data=df, 
+            data=metric_df,
             x="Sample ID", 
-            y=label, 
+            y="Value", 
             hue="Diagnosis",
             cut=0, 
             density_norm="width",
             inner="quart",
-            fill=False)
-        plt.title(f"Pre-filtering {label} per cell")
+            fill=False
+        )
+        plt.ylabel(metric)
+        plt.title(f"{stage} {label} per cell")
         plt.xticks(rotation=90)
 
-        plt.savefig(os.path.join(OUTPATH, f"qc_plot_{metric}_raw.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(os.path.join(OUTPATH, f"qc_plot_{metric}_{stage}.png"), dpi=300, bbox_inches="tight")
 
     # Plot log10 cell counts per sample
     plt.figure(figsize=(3, 6)) 
     sns.stripplot(
-        data=df.drop_duplicates(subset="Sample ID"), 
+        data=metrics_df.drop_duplicates(subset="Sample ID"), 
         x="Diagnosis", 
         y="Log10(cell count)",
         hue="Diagnosis",
@@ -107,16 +125,16 @@ def qc_plots(adata_list, qc_dict):
         legend=False
     )
     sns.pointplot(    
-        data=df.drop_duplicates(subset="Sample ID"), 
+        data=metrics_df.drop_duplicates(subset="Sample ID"), 
         x="Diagnosis", 
         y="Log10(cell count)",
         hue="Diagnosis",
         errorbar="sd", 
         capsize=0.2
     )
-    plt.title(f"Pre-filtering cell counts")
+    plt.title(f"{stage} cell counts")
     plt.savefig(
-        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_diagnosis_raw.png"), 
+        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_diagnosis_{stage}.png"), 
         dpi=300, 
         bbox_inches="tight"
     )
@@ -125,15 +143,15 @@ def qc_plots(adata_list, qc_dict):
     # Plot log10 cell counts per sample
     plt.figure(figsize=(12, 5)) 
     sns.barplot(
-        data=df, 
+        data=metrics_df, 
         x="Sample ID", 
         y="Log10(cell count)",
         hue="Diagnosis",
     )
     plt.xticks(rotation=90)
-    plt.title(f"Pre-filtering cell counts")
+    plt.title(f"{stage} cell counts")
     plt.savefig(
-        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_sample_raw.png"), 
+        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_sample_{stage}.png"), 
         dpi=300, 
         bbox_inches="tight"
     )
@@ -145,20 +163,45 @@ qc_dict = {
         "Percent ribosomal reads": "pct_counts_ribo",
     }
 
-qc_plots(adata_list, qc_dict)
+metrics_df = obtain_metrics(adata_list, qc_dict)
+qc_plots(metrics_df, qc_dict, stage="raw")
 
 
-# # Set static variables
-# MIN_CELLS = 3
-# MIN_FEATURES = 200
-# VARS_TO_REGRESS = ["S_score", "G2M_score"]
+# Filter low-quality cells by median absolute deviation
+def mad_filter(adata_list, qc_dict, nmads=3):
+    """
+    Compute MAD boolean masks and filter per sample
+    """
+    results = {}
 
-# # Filter low-quality cells
+    for label, metric in qc_dict.items():
+        metric_masks = {}
+
+        for sample in adata_list:
+            values = sample.obs[metric].values
+
+            med = np.median(values)
+            mad = median_abs_deviation(values, scale=0.6745)
+
+            mask = (values > med - nmads * mad) & (values < med + nmads * mad)
+
+            sample_id = sample.obs["sample_id"].iloc[0]
+            metric_masks[sample_id] = mask
+
+        results[metric] = metric_masks
+
+    return results
+
+adata_list = mad_filter(adata_list, qc_dict)
+
 # adata = adata[(adata.obs.n_genes_by_counts > 500) & 
 #               (adata.obs.n_genes_by_counts < 6000) & 
 #               (adata.obs.pct_counts_mt < 10), :]
 
-# # Normalize
+# sc.pp.filter_cells(adata, min_genes=100)
+# sc.pp.filter_genes(adata, min_cells=3)
+
+# Normalize
 # sc.pp.normalize_total(adata, target_sum=1e4)
 # sc.pp.log1p(adata)
 
@@ -186,7 +229,7 @@ qc_plots(adata_list, qc_dict)
 # sc.tl.score_genes_cell_cycle(adata, s_genes=s_genes, g2m_genes=g2m_genes)
 # adata.obs['Phase'] = adata.obs['phase']
 
-# sc.pp.regress_out(adata, keys=VARS_TO_REGRESS)
+# sc.pp.regress_out(adata, keys=["S_score", "G2M_score"])
 # sc.pp.scale(adata, max_value=10)
 
 # # Save the object
