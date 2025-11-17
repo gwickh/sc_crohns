@@ -3,6 +3,7 @@ from glob import glob
 import anndata as ad
 import scanpy as sc
 import pandas as pd
+import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -28,19 +29,19 @@ sample_names = [os.path.basename(p) for p in matrix_paths]
 adata_list = []
 for path, sample in zip(matrix_paths, sample_names):
     if ".h5ad" in sample:
-        ad = sc.read_h5ad(path)
-        ad.obs["platform"] = "Parse"  
+        adata = sc.read_h5ad(path)
+        adata.obs["platform"] = "Parse"  
     elif ".h5" in sample:
-        ad = sc.read_10x_h5(path)
-        ad.var["platform"] = "10X_Chromium"  
-        ad.var["gene_name"] = ad.var.index
+        adata = sc.read_10x_h5(path)
+        adata.var["platform"] = "10X_Chromium"  
+        adata.var["gene_name"] = adata.var.index
     else:
         raise ValueError(f"Unknown file type: {sample}")
-    ad.obs["sample_id"] = sample                                # add sample_id column
-    ad.var_names_make_unique()                                  # make var names unique
-    ad.obs_names = [f"{sample}_{bc}" for bc in ad.obs_names]    # make barcodes unique
-    ad.raw = ad                                                 # store raw counts
-    adata_list.append(ad)
+    adata.obs["sample_id"] = sample                                     # add sample_id column
+    adata.var_names_make_unique()                                       # make var names unique
+    adata.obs_names = [f"{sample}_{bc}" for bc in adata.obs_names]      # make barcodes unique
+    adata.raw = adata                                                   # store raw counts
+    adata_list.append(adata)
 
 # Compute per-sample QC metrics and mitochondrial and ribosomal genes
 qc_list = []
@@ -63,30 +64,88 @@ for sample in adata_list:
     )
 
 # Visualize QC metrics across samples
-def qc_violin_plot(adata_list,label, metric):
-    qc_list = []
-    for sample in adata_list:
-        qc_list.append(pd.DataFrame({
-            "Sample ID":    sample.obs["sample_id"].iloc[0],
-            label:          sample.obs[metric]
-        }))
-    df = pd.concat(qc_list)
-    plt.figure(figsize=(12, 5)) 
-    sns.violinplot(data=df, x="Sample ID", y=label, cut=0, inner="quart")
-    plt.xticks(rotation=90)
+def qc_plots(adata_list, qc_dict):
+    for label, metric in qc_dict.items():
+        qc_list = []
+        for sample in adata_list:
+            qc_list.append(
+                pd.DataFrame({
+                    "Sample ID":            sample.obs["sample_id"].iloc[0],
+                    label:                  sample.obs[metric],
+                    "Log10(cell count)":    np.repeat(np.log10(sample.n_obs), sample.n_obs),
+                    "Diagnosis":            "Crohn's Disease" if "Crohns" in sample.obs["sample_id"].iloc[0] 
+                                                else "Normal"
+                })
+            )
+        df = pd.concat(qc_list)
 
-    plt.savefig(os.path.join(OUTPATH, f"qc_plot_{metric}_raw.png"), dpi=300, bbox_inches="tight")
+        # Plot boxplots plots for each metric
+        plt.figure(figsize=(12, 5)) 
+        sns.violinplot(
+            data=df, 
+            x="Sample ID", 
+            y=label, 
+            hue="Diagnosis",
+            cut=0, 
+            density_norm="width",
+            inner="quart",
+            fill=False)
+        plt.title(f"Pre-filtering {label} per cell")
+        plt.xticks(rotation=90)
+
+        plt.savefig(os.path.join(OUTPATH, f"qc_plot_{metric}_raw.png"), dpi=300, bbox_inches="tight")
+
+    # Plot log10 cell counts per sample
+    plt.figure(figsize=(3, 6)) 
+    sns.stripplot(
+        data=df.drop_duplicates(subset="Sample ID"), 
+        x="Diagnosis", 
+        y="Log10(cell count)",
+        hue="Diagnosis",
+        dodge=True, 
+        alpha=0.5, 
+        legend=False
+    )
+    sns.pointplot(    
+        data=df.drop_duplicates(subset="Sample ID"), 
+        x="Diagnosis", 
+        y="Log10(cell count)",
+        hue="Diagnosis",
+        errorbar="sd", 
+        capsize=0.2
+    )
+    plt.title(f"Pre-filtering cell counts")
+    plt.savefig(
+        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_diagnosis_raw.png"), 
+        dpi=300, 
+        bbox_inches="tight"
+    )
+    plt.clf()
+
+    # Plot log10 cell counts per sample
+    plt.figure(figsize=(12, 5)) 
+    sns.barplot(
+        data=df, 
+        x="Sample ID", 
+        y="Log10(cell count)",
+        hue="Diagnosis",
+    )
+    plt.xticks(rotation=90)
+    plt.title(f"Pre-filtering cell counts")
+    plt.savefig(
+        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_sample_raw.png"), 
+        dpi=300, 
+        bbox_inches="tight"
+    )
 
 qc_dict = {
-    "Number of genes": "n_genes_by_counts", 
-    "Total read count": "total_counts",
-    "Log10 total read count": "log1p_total_counts",
-    "Percent mitochondrial reads": "pct_counts_mt",
-    "Percent ribosomal reads": "pct_counts_ribo",
-}
+        "Number of genes": "n_genes_by_counts", 
+        "Log10 total read count": "log1p_total_counts",
+        "Percent mitochondrial reads": "pct_counts_mt",
+        "Percent ribosomal reads": "pct_counts_ribo",
+    }
 
-for label, metric in qc_dict.items():
-    qc_violin_plot(adata_list, label, metric)
+qc_plots(adata_list, qc_dict)
 
 
 # # Set static variables
