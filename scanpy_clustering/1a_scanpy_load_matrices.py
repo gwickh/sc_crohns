@@ -34,7 +34,7 @@ for path, sample in zip(matrix_paths, sample_names):
         adata.obs["platform"] = "Parse"  
     elif ".h5" in sample:
         adata = sc.read_10x_h5(path)
-        adata.var["platform"] = "10X_Chromium"  
+        adata.obs["platform"] = "10X_Chromium"  
         adata.var["gene_name"] = adata.var.index
     else:
         raise ValueError(f"Unknown file type: {sample}")
@@ -44,16 +44,23 @@ for path, sample in zip(matrix_paths, sample_names):
     adata.raw = adata                                                   # store raw counts
     adata_list.append(adata)
 
+adata_list_raw = [adata.copy() for adata in adata_list]                 # store raw copies
+
+def filter_low_count_cells(adata_list) -> list:
+    """
+    Filter cells with low total counts.
+    """
+    for sample in adata_list:
+        sc.pp.filter_cells(sample, min_counts=200)
+        sc.pp.filter_cells(sample, min_genes=100)
+    return adata_list
+
 # Compute per-sample QC metrics and mitochondrial and ribosomal genes
 def compute_qc_metrics(adata_list) -> list:
     """
     Compute QC metrics for each sample in adata_list.
     """
     for sample in adata_list:
-        
-        # Remove empty droplets
-        sc.pp.filter_cells(sample, min_counts=1000)
-
         # Identify mitochondrial and ribosomal genes
         sample.var["ribo"] = sample.var["gene_name"].str.startswith(("RPS", "RPL"))
         if sample.var["ribo"].sum() == 0:
@@ -99,73 +106,79 @@ def obtain_metrics(adata_list, qc_dict) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True)
 
 # Plot QC metrics
-def qc_plots(metrics_df, qc_dict, stage="") -> None:
+def qc_plots(   
+    stages_dict: dict, 
+    qc_dict: dict, 
+    outpath: str
+) -> None:
     """
     Plot QC metrics across samples
     """
+    stages_list = []
+
+    for stage_name, adata_list in stages_dict.items():
+
+        for sample in adata_list:
+            sample_id = sample.obs["sample_id"].iloc[0]
+            diagnosis = "Crohn's Disease" if "Crohns" in sample_id else "Normal"
+
+            for label, metric in qc_dict.items():
+                values = sample.obs[metric].values
+
+                stages_list.append(pd.DataFrame({
+                    "Sample ID": sample_id,
+                    "Diagnosis": diagnosis,
+                    "Stage": stage_name,
+                    "Metric": label,
+                    "Value": values,
+                    "Log10(cell count)": np.log10(sample.n_obs)
+                }))
+
+    stages_df = pd.concat(stages_list, ignore_index=True)
 
     for label, metric in qc_dict.items():
-        metric_df = metrics_df[metrics_df["Metric"] == label]
-        # Plot violins over each metric
-        plt.figure(figsize=(12, 5)) 
+        plt.figure(figsize=(22, 6))
+
         sns.violinplot(
-            data=metric_df,
-            x="Sample ID", 
-            y="Value", 
-            hue="Diagnosis",
-            cut=0, 
-            density_norm="width",
+            data=stages_df[stages_df["Metric"] == label],
+            x="Sample ID",
+            y="Value",
+            hue="Stage",
+            cut=0,
             inner="quart",
-            fill=False
+            linewidth=1,
+            density_norm="width"
         )
-        plt.ylabel(metric)
-        plt.title(f"{stage} {label} per cell")
+        plt.ylabel(label)
+        plt.title(f"{label} across preprocessing stages")
         plt.xticks(rotation=90)
+        plt.legend(title="Stage", bbox_to_anchor=(1.05, 1), loc="upper left")
 
-        plt.savefig(os.path.join(OUTPATH, f"qc_plot_{metric}_{stage}.png"), dpi=300, bbox_inches="tight")
+        if outpath:
+            fname = f"qc_compare_{label.replace(' ', '_')}.png"
+            plt.savefig(os.path.join(outpath, fname), dpi=300, bbox_inches="tight")
 
-    # Plot log10 cell counts per sample
-    plt.figure(figsize=(3, 6)) 
-    sns.stripplot(
-        data=metrics_df.drop_duplicates(subset="Sample ID"), 
-        x="Diagnosis", 
-        y="Log10(cell count)",
-        hue="Diagnosis",
-        dodge=True, 
-        alpha=0.5, 
-        legend=False
-    )
-    sns.pointplot(    
-        data=metrics_df.drop_duplicates(subset="Sample ID"), 
-        x="Diagnosis", 
-        y="Log10(cell count)",
-        hue="Diagnosis",
-        errorbar="sd", 
-        capsize=0.2
-    )
-    plt.title(f"{stage} cell counts")
-    plt.savefig(
-        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_diagnosis_{stage}.png"), 
-        dpi=300, 
-        bbox_inches="tight"
-    )
-    plt.clf()
+        plt.show()
 
     # Plot log10 cell counts per sample
-    plt.figure(figsize=(12, 5)) 
+    cellcount_df = (
+        stages_df[["Sample ID", "Stage", "Log10(cell count)"]].drop_duplicates()
+    )
+    plt.figure(figsize=(22, 6))
     sns.barplot(
-        data=metrics_df, 
+        data=cellcount_df, 
         x="Sample ID", 
         y="Log10(cell count)",
-        hue="Diagnosis",
+        hue="Stage",
     )
     plt.xticks(rotation=90)
-    plt.title(f"{stage} cell counts")
+    plt.title(f"Log10 cell counts")
     plt.savefig(
-        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_sample_{stage}.png"), 
+        os.path.join(OUTPATH, f"qc_plot_log_cell_counts_per_sample.png"), 
         dpi=300, 
         bbox_inches="tight"
     )
+
 
 # Utility to create MAD mask for a given metric
 def create_mad_mask(adata_list, sample, metric, nmads=3) -> np.ndarray:
@@ -189,6 +202,7 @@ def create_mad_mask(adata_list, sample, metric, nmads=3) -> np.ndarray:
     else:
         mask = (sample_values > med - nmads * mad) & (sample_values < med + nmads * mad)
     return mask
+
 
 # Apply MAD filtering across samples
 def mad_filter(adata_list, qc_dict, nmads=3) -> list:
@@ -248,26 +262,33 @@ def obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, outpath) -> None:
     adata_df = pd.DataFrame(adata_stats)
     adata_df.to_csv(os.path.join(outpath, "qc_stats_mad_filtering.csv"), index=False)
 
-
 # Run preprocessing steps
 qc_dict = {
-        "Number of genes": "n_genes_by_counts", 
-        "Log10 total read count": "log1p_total_counts",
-        "Percent mitochondrial reads": "pct_counts_mt",
-        "Percent ribosomal reads": "pct_counts_ribo",
-    }
+    "Number of genes": "n_genes_by_counts", 
+    "Log10 total read count": "log1p_total_counts",
+    "Percent mitochondrial reads": "pct_counts_mt",
+    "Percent ribosomal reads": "pct_counts_ribo",
+}
 
-compute_qc_metrics(adata_list)
+adata_list = filter_low_count_cells(adata_list)
 
-metrics_df = obtain_metrics(adata_list, qc_dict)
-qc_plots(metrics_df, qc_dict, stage="Raw")
+adata_list_raw = compute_qc_metrics(adata_list_raw)
+adata_list = compute_qc_metrics(adata_list)
 
 adata_list_filtered = mad_filter(adata_list, qc_dict)
 
-metrics_df_filtered = obtain_metrics(adata_list_filtered, qc_dict)
-qc_plots(metrics_df_filtered, qc_dict, stage="Filtered")
+# metrics_df = obtain_metrics(adata_list, qc_dict)
+# metrics_df_filtered = obtain_metrics(adata_list_filtered, qc_dict)
 
 obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, OUTPATH)
+
+stages_dict = {
+    "Raw": adata_list_raw,
+    "Background filtering": adata_list,
+    "Platform-level MAD filtering": adata_list_filtered
+    # "Sample-level MAD filtering": adata_list_filtered_sample
+}
+qc_plots(stages_dict, qc_dict, OUTPATH)
 
 
 
