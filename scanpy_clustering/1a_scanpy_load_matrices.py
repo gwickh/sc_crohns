@@ -9,6 +9,10 @@ from utils.scanpy_qc_utils import (
     qc_plots,
 )
 
+from utils.scanpy_doublet_utils import run_scrublet, calculate_doublet_threshold
+
+os.chdir("/users/yep25yan/dev")
+
 # Set paths
 MATRIX_DIR = "project-area/data/crohns_scrnaseq/10c_14n_analysis/crohns_samples"
 
@@ -42,6 +46,10 @@ adata_list_raw = compute_qc_metrics(adata_list_raw)
 adata_list = compute_qc_metrics(adata_list)
 
 adata_list_filtered = mad_filter(adata_list, qc_dict)
+
+adata_list_filtered = run_scrublet(adata_list_filtered)
+
+calculate_doublet_threshold(adata_list_filtered, OUTPATH, bins=50)
 
 obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, OUTPATH)
 
