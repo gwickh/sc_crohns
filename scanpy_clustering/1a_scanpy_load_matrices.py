@@ -49,7 +49,14 @@ adata_list_filtered = mad_filter(adata_list, qc_dict)
 
 adata_list_filtered = run_scrublet(adata_list_filtered)
 
-calculate_doublet_threshold(adata_list_filtered, OUTPATH, bins=50)
+transformation = ["probit"]
+
+calculate_doublet_threshold(
+    adata_list_filtered,
+    outpath=OUTPATH,
+    transformation=transformation,
+    bins=50
+)
 
 obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, OUTPATH)
 
