@@ -49,12 +49,10 @@ adata_list_filtered = mad_filter(adata_list, qc_dict)
 
 adata_list_filtered = run_scrublet(adata_list_filtered)
 
-transformation = ["probit"]
-
-calculate_doublet_threshold(
+adata_list_filtered = calculate_doublet_threshold(
     adata_list_filtered,
     outpath=OUTPATH,
-    transformation=transformation,
+    transformation=["probit"],
     bins=50
 )
 
@@ -65,6 +63,7 @@ stages_dict = {
     "Background filtering": adata_list,
     "Platform-level MAD filtering": adata_list_filtered,
 }
+
 qc_plots(stages_dict, qc_dict, OUTPATH)
 
 # # Normalize to median total counts of each sample and log1p transform

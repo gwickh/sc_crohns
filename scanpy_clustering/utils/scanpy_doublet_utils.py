@@ -56,22 +56,38 @@ def score_preprocessing(sample, transformation="raw") -> np.ndarray:
 
 
 # Fit GMM and obtain threshold
-def fit_gmm(sample, transformed_scores) -> GaussianMixture:
+def fit_gmm(transformed_scores, tail_fraction=0.05) -> GaussianMixture:
     """
     Utility to fit a 2-component GMM to scrublet scores.
     """
     # Reshape to column vector for sklearn
     transformed_scores = transformed_scores.reshape(-1, 1)
 
+    # Initialize means based on tail points
+    q_tail = np.quantile(transformed_scores, 1 - tail_fraction)
+    tail_points = transformed_scores[transformed_scores >= q_tail]
+
+    high_init = np.median(tail_points)
+    low_init = np.quantile(transformed_scores, 0.2)
+
+    means_init = np.array([[low_init], [high_init]])
+    means_init = np.sort(means_init, axis=0)
+
     # Fit 2-component GMM
-    gmm = GaussianMixture(n_components=2, covariance_type="full", random_state=0).fit(
-        transformed_scores
-    )
+    gmm = GaussianMixture(
+        n_components=2, 
+        covariance_type="full", 
+        random_state=0,
+        reg_covar=1e-6,
+        n_init=1,
+        init_params="kmeans",
+        means_init=means_init,
+    ).fit(transformed_scores)
 
     return gmm
 
 
-def obtain_gmm_threshold(gmm) -> pd.DataFrame:
+def get_gmm_params(gmm) -> pd.DataFrame:
     """
     Create dataframe with Gaussian parameters and decision threshold.
     """
@@ -96,8 +112,46 @@ def obtain_gmm_threshold(gmm) -> pd.DataFrame:
 
     return gmm_params
 
+def backtransform_threshold(
+        gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
+    ):
+    """
+    Backtransform threshold to original score space.
+    """
+    if transformation == "log":
+        transformed_scores = np.expm1(transformed_scores)
+        gaussian_intersection = np.expm1(gaussian_intersection)
 
-def calculate_point_coords(
+        comp1_pdf = comp1_pdf * 1 / (1 + np.expm1(x))
+        comp2_pdf = comp2_pdf * 1 / (1 + np.expm1(x))
+
+        x = np.expm1(x)
+
+    elif transformation == "logit":
+        transformed_scores = 1 / (1 + np.exp(-transformed_scores))
+        gaussian_intersection = 1 / (1 + np.exp(-gaussian_intersection))
+
+        term = (1 + np.exp(-x))
+        comp1_pdf = (
+            comp1_pdf * 1 / (1 / term) * (1 - 1 / term)
+        )
+        comp2_pdf = (
+            comp2_pdf * 1 / (1 / term) * (1 - 1 / term)
+        )
+
+        x = 1 / (1 + np.exp(-x))
+    
+    elif transformation == "probit":
+        transformed_scores = norm.cdf(transformed_scores)
+        gaussian_intersection = norm.cdf(gaussian_intersection)
+
+        comp1_pdf = comp1_pdf * 1 / norm.pdf(x)
+        comp2_pdf = comp2_pdf * 1 / norm.pdf(x)
+
+        x = norm.cdf(x)
+
+
+def compute_threshold(
     sample,
     gmm_params,
     transformed_scores,
@@ -106,7 +160,7 @@ def calculate_point_coords(
     bins=50,
 ):
     """
-    Utility to plot histogram + GMM components + threshold.
+    Utility to compute GMM threshold based on intersection of components.
     """
     sample_id = sample.obs["sample_id"].iloc[0]
 
@@ -123,12 +177,14 @@ def calculate_point_coords(
 
     # Calculate threshold at intersection of components
     intersection_points = np.where(np.diff(np.sign(comp1_pdf - comp2_pdf)) != 0)[0]
+    print(intersection_points)
 
     if intersection_points.size == 0:
         print(
             f"""No intersection found between GMM components for {sample_id}
              using {transformation} transformation."""
         )
+        return None, transformed_scores, x, comp1_pdf, comp2_pdf
 
     elif intersection_points.size > 1:
         print(
@@ -137,43 +193,43 @@ def calculate_point_coords(
              as threshold."""
         )
 
-    gaussian_intersection = intersection_points[
-        np.argmin(np.abs(x[intersection_points]))
+    gaussian_intersection = x[
+        intersection_points[np.argmin(np.abs(x[intersection_points]))]
     ]
 
     # Backtransform to original space
     if backtransform is True:
-        if transformation == "log":
-            transformed_scores = np.expm1(transformed_scores)
-            gaussian_intersection = np.expm1(gaussian_intersection)
-
-            comp1_pdf = comp1_pdf * (np.expm1(x))
-            comp2_pdf = comp2_pdf * (np.expm1(x))
-
-        elif transformation == "logit":
-            transformed_scores = 1 / (1 + np.exp(-transformed_scores))
-            gaussian_intersection = 1 / (1 + np.exp(-gaussian_intersection))
-
-            comp1_pdf = comp1_pdf * (x * (1 - x))
-            comp2_pdf = comp2_pdf * (x * (1 - x))
-
-        elif transformation == "probit":
-            transformed_scores = norm.cdf(transformed_scores)
-            gaussian_intersection = norm.cdf(gaussian_intersection)
-
-            comp1_pdf = comp1_pdf * 1 / norm.pdf(x)
-            comp2_pdf = comp2_pdf * 1 / norm.pdf(x)
-
-            x = norm.cdf(x)
-
+        backtransform_threshold(
+            gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
+        )
 
     # Components in count scale
-    bindwidth = (transformed_scores.max() - transformed_scores.min()) / bins
+    binwidth = (transformed_scores.max() - transformed_scores.min()) / bins
 
-    comp1 = comp1_pdf * len(transformed_scores) * bindwidth
-    comp2 = comp2_pdf * len(transformed_scores) * bindwidth
+    comp1 = comp1_pdf * len(transformed_scores) * binwidth
+    comp2 = comp2_pdf * len(transformed_scores) * binwidth
 
     return gaussian_intersection, transformed_scores, x, comp1, comp2
+
+
+def call_doublet(sample, gaussian_intersection) -> sc.AnnData:
+    """
+    Utility to call doublets based on GMM threshold.
+    """
+    if gaussian_intersection is None:
+        raise ValueError("No threshold found; cannot call doublets.")
+    else:
+        sample_id = sample.obs["sample_id"].iloc[0]
+        threshold = float(gaussian_intersection)
+
+        sample.obs["predicted_doublet"] = np.where(
+            sample.obs["doublet_score"] >= threshold,
+            "doublet",
+            "singlet",
+        )
+        print(f"Doublet threshold for {sample_id}: {threshold:.3f}")
+
+    return sample
 
 
 def plot_gmm(
@@ -227,7 +283,7 @@ def plot_gmm(
 
     # Add threshold line if intersection exists
     if len(np.atleast_1d(gaussian_intersection)) == 1:
-        threshold = float(x[gaussian_intersection])
+        threshold = float(gaussian_intersection)
 
         plt.axvline(
             threshold,
@@ -246,8 +302,7 @@ def plot_gmm(
         plt.xlabel("Scrublet doublet score")
         plt.savefig(
             os.path.join(
-                outpath, 
-                f"{sample_id}_{transformation}_doublets_GM_backtransformed.png"
+                outpath, f"{sample_id}_{transformation}_doublets_GM_backtransformed.png"
             ),
             dpi=300,
             bbox_inches="tight",
@@ -256,47 +311,124 @@ def plot_gmm(
         plt.title(f"2-component GMM on {transformation} Scrublet scores of {sample_id}")
         plt.xlabel(f"{transformation}-transformed Scrublet doublet score")
         plt.savefig(
-            os.path.join(
-                outpath, 
-                f"{sample_id}_{transformation}_doublets_GMM.png"
-            ),
+            os.path.join(outpath, f"{sample_id}_{transformation}_doublets_GMM.png"),
             dpi=300,
             bbox_inches="tight",
+        )
+    plt.close()
+
+
+def plot_doublet_proportions(adata_list_filtered, thresholds, outpath) -> None:
+    """
+    Utility to plot doublet proportions based on GMM threshold.
+    """
+    
+    results = []
+
+    for adata in adata_list_filtered:
+        sample_id = adata.obs["sample_id"].iloc[0]
+
+        if sample_id not in thresholds:
+            print(f"No threshold for {sample_id}; skipping.")
+            continue
+
+        threshold = thresholds[sample_id]
+
+        scores = adata.obs["doublet_score"].values
+        frac = np.mean(scores >= threshold)
+
+        results.append({"Sample ID": sample_id, "Doublet fraction": frac})
+
+    df = pd.DataFrame(results)
+
+    # Plot
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=df, x="Sample ID", y="Doublet fraction", color="red")
+    plt.xticks(rotation=90)
+    plt.ylim(0, df["Doublet fraction"].max() * 1.1)
+    plt.title("Doublet Fraction per Sample")
+    plt.ylabel("Fraction of cells ≥ threshold")
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(outpath, "doublet_fraction_barplot.png"),
+        dpi=300,
+        bbox_inches="tight",
     )
     plt.close()
 
 
 def calculate_doublet_threshold(
     adata_list_filtered, outpath, transformation, bins=50
-) -> None:
+) -> list:
     """
     Calculate doublet score threshold based on GMM parameters and plot results
     """
+
+    thresholds = {}
+
     for sample in adata_list_filtered:
         for transform in transformation:
-            transformed_scores = score_preprocessing(sample, transformation=transform)
-            gmm = fit_gmm(sample, transformed_scores)
-            gmm_params = obtain_gmm_threshold(gmm)
 
-            for b in [True, False]:
-                gaussian_intersection, transformed_scores, x, comp1, comp2 = calculate_point_coords(
+            transformed_scores = score_preprocessing(sample, transformation=transform)
+            gmm = fit_gmm(transformed_scores)
+            gmm_params = get_gmm_params(gmm)
+
+            # Compute threshold in transformed space
+            t_gaussian_intersection, t_transformed_scores, t_x, t_comp1, t_comp2 = (
+                compute_threshold(
                     sample,
                     gmm_params,
                     transformed_scores,
                     transformation=transform,
                     bins=bins,
-                    backtransform=b,
+                    backtransform=False,
                 )
-                plot_gmm(
+            )
+
+            plot_gmm(
+                sample,
+                t_gaussian_intersection,
+                t_x,
+                t_comp1,
+                t_comp2,
+                gmm_params,
+                outpath,
+                t_transformed_scores,
+                backtransform=False,
+                transformation=transform,
+                bins=bins,
+            )
+
+            # Compute threshold in original space
+            bt_gaussian_intersection, bt_transformed_scores, bt_x, bt_comp1, bt_comp2 = (
+                compute_threshold(
                     sample,
-                    gaussian_intersection,
-                    x,
-                    comp1,
-                    comp2,
                     gmm_params,
-                    outpath,
                     transformed_scores,
-                    backtransform=b,
                     transformation=transform,
                     bins=bins,
+                    backtransform=True,
                 )
+            )
+
+            plot_gmm(
+                sample,
+                bt_gaussian_intersection,
+                bt_x,
+                bt_comp1,
+                bt_comp2,
+                gmm_params,
+                outpath,
+                bt_transformed_scores,
+                backtransform=True,
+                transformation=transform,
+                bins=bins,
+            )
+
+            sample = call_doublet(sample, bt_gaussian_intersection)
+            thresholds[sample.obs["sample_id"].iloc[0]] = bt_gaussian_intersection
+            
+    plot_doublet_proportions(adata_list_filtered, thresholds, outpath)
+
+    return adata_list_filtered
