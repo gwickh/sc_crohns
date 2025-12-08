@@ -75,8 +75,8 @@ def fit_gmm(transformed_scores, tail_fraction=0.05) -> GaussianMixture:
 
     # Fit 2-component GMM
     gmm = GaussianMixture(
-        n_components=2, 
-        covariance_type="full", 
+        n_components=2,
+        covariance_type="full",
         random_state=0,
         reg_covar=1e-6,
         n_init=1,
@@ -140,7 +140,7 @@ def backtransform_threshold(
         )
 
         x = 1 / (1 + np.exp(-x))
-    
+
     elif transformation == "probit":
         transformed_scores = norm.cdf(transformed_scores)
         gaussian_intersection = norm.cdf(gaussian_intersection)
@@ -200,7 +200,12 @@ def compute_threshold(
     # Backtransform to original space
     if backtransform is True:
         backtransform_threshold(
-            gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
+            gaussian_intersection,
+            transformation,
+            transformed_scores,
+            x,
+            comp1_pdf,
+            comp2_pdf,
         )
 
     # Components in count scale
@@ -322,7 +327,7 @@ def plot_doublet_proportions(adata_list_filtered, thresholds, outpath) -> None:
     """
     Utility to plot doublet proportions based on GMM threshold.
     """
-    
+
     results = []
 
     for adata in adata_list_filtered:
@@ -428,7 +433,7 @@ def calculate_doublet_threshold(
 
             sample = call_doublet(sample, bt_gaussian_intersection)
             thresholds[sample.obs["sample_id"].iloc[0]] = bt_gaussian_intersection
-            
+
     plot_doublet_proportions(adata_list_filtered, thresholds, outpath)
 
     return adata_list_filtered
