@@ -5,8 +5,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-
-from scipy.stats import boxcox, norm
+from scipy.stats import norm
 from sklearn.mixture import GaussianMixture
 
 
@@ -40,16 +39,13 @@ def score_preprocessing(sample, transformation="raw") -> np.ndarray:
     elif transformation == "probit":
         transformed_scores = norm.ppf(scores + eps)
 
-    elif transformation == "boxcox":
-        transformed_scores = np.asarray(boxcox(scores + eps)[0])
-
     elif transformation == "raw":
         transformed_scores = scores
 
     else:
         raise ValueError(
             f"Unknown transformation: {transformation},\
-            choose from 'log', 'logit', 'probit', 'boxcox', or 'raw'."
+            choose from 'log', 'logit', 'probit', or 'raw'."
         )
 
     return transformed_scores
@@ -91,6 +87,7 @@ def get_gmm_params(gmm) -> pd.DataFrame:
     """
     Create dataframe with Gaussian parameters and decision threshold.
     """
+
     # Extract means, variances, weights
     means = gmm.means_.flatten()
     vars_ = gmm.covariances_.flatten()
@@ -112,9 +109,10 @@ def get_gmm_params(gmm) -> pd.DataFrame:
 
     return gmm_params
 
+
 def backtransform_threshold(
-        gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
-    ):
+    gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
+) -> None:
     """
     Backtransform threshold to original score space.
     """
@@ -131,13 +129,9 @@ def backtransform_threshold(
         transformed_scores = 1 / (1 + np.exp(-transformed_scores))
         gaussian_intersection = 1 / (1 + np.exp(-gaussian_intersection))
 
-        term = (1 + np.exp(-x))
-        comp1_pdf = (
-            comp1_pdf * 1 / (1 / term) * (1 - 1 / term)
-        )
-        comp2_pdf = (
-            comp2_pdf * 1 / (1 / term) * (1 - 1 / term)
-        )
+        term = 1 + np.exp(-x)
+        comp1_pdf = comp1_pdf * 1 / (1 / term) * (1 - 1 / term)
+        comp2_pdf = comp2_pdf * 1 / (1 / term) * (1 - 1 / term)
 
         x = 1 / (1 + np.exp(-x))
 
@@ -158,7 +152,7 @@ def compute_threshold(
     transformation=None,
     backtransform=False,
     bins=50,
-):
+) -> tuple:
     """
     Utility to compute GMM threshold based on intersection of components.
     """
@@ -374,7 +368,6 @@ def calculate_doublet_threshold(
 
     for sample in adata_list_filtered:
         for transform in transformation:
-
             transformed_scores = score_preprocessing(sample, transformation=transform)
             gmm = fit_gmm(transformed_scores)
             gmm_params = get_gmm_params(gmm)
@@ -406,15 +399,19 @@ def calculate_doublet_threshold(
             )
 
             # Compute threshold in original space
-            bt_gaussian_intersection, bt_transformed_scores, bt_x, bt_comp1, bt_comp2 = (
-                compute_threshold(
-                    sample,
-                    gmm_params,
-                    transformed_scores,
-                    transformation=transform,
-                    bins=bins,
-                    backtransform=True,
-                )
+            (
+                bt_gaussian_intersection,
+                bt_transformed_scores,
+                bt_x,
+                bt_comp1,
+                bt_comp2,
+            ) = compute_threshold(
+                sample,
+                gmm_params,
+                transformed_scores,
+                transformation=transform,
+                bins=bins,
+                backtransform=True,
             )
 
             plot_gmm(
