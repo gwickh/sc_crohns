@@ -1,10 +1,20 @@
 import os
 
+import anndata as an
 import numpy as np
 import scanpy as sc
 
 
-def run_pca(hvgs, adata, method_name, dr_name, PCA_OUTPUT_PATH, vfeature_objects):
+def run_pca(
+    hvgs,
+    adata,
+    method_name,
+    dr_name,
+    PCA_OUTPUT_PATH,
+    vfeature_objects,
+    s_genes,
+    g2m_genes,
+) -> None:
     """
     Run PCA on set of HVG and store results in adata.
     """
@@ -16,6 +26,11 @@ def run_pca(hvgs, adata, method_name, dr_name, PCA_OUTPUT_PATH, vfeature_objects
     # Save features
     with open(os.path.join(PCA_OUTPUT_PATH, f"{method_name}_features.txt"), "w") as f:
         f.write("\n".join(features))
+
+    sc.tl.score_genes_cell_cycle(hv_adata, s_genes=s_genes, g2m_genes=g2m_genes)
+    # sc.pp.regress_out(adata, ["S_score", "G2M_score"])    # scvi does not need regressing out cell cycle scores
+
+    sc.pp.scale(hv_adata, max_value=10)
 
     # PCA
     sc.tl.pca(hv_adata, svd_solver="auto", n_comps=50, random_state=42)
@@ -35,8 +50,16 @@ def run_pca(hvgs, adata, method_name, dr_name, PCA_OUTPUT_PATH, vfeature_objects
 
 
 def pca_dispersion(
-    adata, PCA_OUTPUT_PATH, disps, xmin, xmax, dr_list, vfeature_objects
-):
+    adata,
+    PCA_OUTPUT_PATH,
+    disps,
+    xmin,
+    xmax,
+    dr_list,
+    vfeature_objects,
+    s_genes,
+    g2m_genes,
+) -> an.AnnData:
     """
     # Loop over dispersion cutoffs using mean.var.plot equivalent
     """
@@ -56,12 +79,23 @@ def pca_dispersion(
             .head(2000)
             .index
         )
-        run_pca(hvgs, adata, method_name, dr_name, PCA_OUTPUT_PATH, vfeature_objects)
+
+        run_pca(
+            hvgs,
+            adata,
+            method_name,
+            dr_name,
+            PCA_OUTPUT_PATH,
+            vfeature_objects,
+            s_genes,
+            g2m_genes,
+        )
+    return adata
 
 
 def pca_varfeatures(
-    adata, PCA_OUTPUT_PATH, n_features, dr_list, vfeature_objects
-) -> None:
+    adata, PCA_OUTPUT_PATH, n_features, dr_list, vfeature_objects, s_genes, g2m_genes
+) -> an.AnnData:
     for n in n_features:
         method_name = f"vst_top_{n}"
         dr_name = f"pca_{method_name}"
@@ -71,4 +105,14 @@ def pca_varfeatures(
 
         hvgs = adata.var.highly_variable
 
-        run_pca(hvgs, adata, method_name, dr_name, PCA_OUTPUT_PATH, vfeature_objects)
+        run_pca(
+            hvgs,
+            adata,
+            method_name,
+            dr_name,
+            PCA_OUTPUT_PATH,
+            vfeature_objects,
+            s_genes,
+            g2m_genes,
+        )
+    return adata
