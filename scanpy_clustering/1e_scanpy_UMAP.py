@@ -2,6 +2,8 @@ import os
 
 import anndata as an
 import matplotlib
+import numpy as np
+import pandas as pd
 import scanpy as sc
 
 matplotlib.use("Agg", force=True)
@@ -14,6 +16,17 @@ UMAP_PATH = os.path.join(SCANPY_OBJECT_PATH, "UMAP_plots")
 os.makedirs(UMAP_PATH) if not os.path.exists(UMAP_PATH) else None
 
 
+sid = adata.obs["sample_id"].astype(str)
+status = np.where(
+    sid.str.contains("crohns", case=False, na=False),
+    "crohns",
+    np.where(sid.str.contains("normal", case=False, na=False), "normal", "other"),
+)
+adata.obs["crohns_or_normal"] = pd.Categorical(
+    status, categories=["normal", "crohns", "other"]
+)
+
+
 def plot_umaps_for_grid(
     adata,
     disps,
@@ -23,16 +36,10 @@ def plot_umaps_for_grid(
     UMAP_PATH,
     random_state=0,
 ):
-    """
-    Loop over the exact same DR/k/res grid as run_clustering and save UMAPs
-    colored by cluster, sample_id
-    """
-
-    # backup global X_umap since sc.tl.umap writes there
     had_umap = "X_umap" in adata.obsm
     umap_backup = adata.obsm["X_umap"].copy() if had_umap else None
 
-    def _do_one_dr(dr):
+    def _do_one_dr(dr) -> None:
         dr_out = os.path.join(UMAP_PATH, dr)
         os.makedirs(dr_out, exist_ok=True)
 
@@ -42,7 +49,6 @@ def plot_umaps_for_grid(
                 print(f"[skip] Missing neighbors: {neighbors_key}")
                 continue
 
-            # Compute one UMAP per (dr, k)
             basis = f"umap_{dr}_k{k}"
             umap_key = f"X_{basis}"
 
@@ -52,7 +58,6 @@ def plot_umaps_for_grid(
                 )
                 adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
 
-            # Plot for each resolution (cluster labels differ)
             for r in res:
                 cl_key = f"clusters_{dr}_k{k}_r{r}"
                 if cl_key not in adata.obs:
@@ -60,29 +65,39 @@ def plot_umaps_for_grid(
                     continue
 
                 out_png = os.path.join(dr_out, f"{basis}__r{r}.png")
-                title = f"{dr} | k={k} | r={r}"
+                base_title = f"{dr} | k={k} | r={r}"
 
-                sc.pl.embedding(
+                colors = [cl_key, "sample_id", "crohns_or_normal"]
+                titles = [
+                    f"{base_title} | clusters",
+                    f"{base_title} | sample_id",
+                    f"{base_title} | crohns/normal",
+                ]
+
+                fig = sc.pl.embedding(
                     adata,
                     basis=basis,
-                    color=[cl_key, "sample_id"],
-                    title=title,
+                    color=colors,
+                    title=titles,
+                    ncols=3,
+                    legend_loc="right margin",
+                    legend_fontsize=7,
                     show=False,
+                    return_fig=True,
                 )
-                plt.savefig(out_png, dpi=150, bbox_inches="tight")
-                plt.close()
 
-    # mean.var.plot_disp_* DRs
+                fig.set_size_inches(7.0 * 3, 6.0)  # figure size
+                fig.subplots_adjust(wspace=0.8)  # panel spacing
+
+                fig.savefig(out_png, dpi=150, bbox_inches="tight", pad_inches=0.4)
+                plt.close(fig)
+
     for disp in disps:
-        dr = f"pca_mean.var.plot_disp_{disp}"
-        _do_one_dr(dr)
+        _do_one_dr(f"pca_mean.var.plot_disp_{disp}")
 
-    # vst_top_* DRs
     for n in n_features:
-        dr = f"pca_vst_top_{n}"
-        _do_one_dr(dr)
+        _do_one_dr(f"pca_vst_top_{n}")
 
-    # restore original X_umap if it existed
     if had_umap:
         adata.obsm["X_umap"] = umap_backup
 
