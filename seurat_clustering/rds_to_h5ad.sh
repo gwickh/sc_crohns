@@ -8,7 +8,7 @@
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-medium
 
-# Usage: sbatch rds_to_h5ad.sh <SCRIPT_PATH> <RDS_FILE_PATH>
+# Usage: sbatch PATH/TO/rds_to_h5ad.sh <SCRIPT_PATH> <RDS_FILE_PATH>
 
 # Arguments
 SCRIPT_PATH="$1"
