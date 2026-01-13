@@ -10,7 +10,7 @@
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-medium
 
-# Argumentsß
+# Arguments
 SCRIPT_DIR="$1"
 OUT_DIR="$2"
 
