@@ -8,7 +8,7 @@
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-short
 
 # usage: sbatch sc_crohns/scanpy_clustering/1_scanpy_slurm.sh sc_crohns/scanpy_clustering/ project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/
 
@@ -22,10 +22,10 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    # "1a_scanpy_load_matrices.py"
+    "1a_scanpy_load_matrices.py"
     # "1b_scanpy_PCA.py"
     # "1c_scanpy_clustering.py"
-    "1e_scanpy_UMAP.py"
+    # "1e_scanpy_UMAP.py"
 )
 
 
