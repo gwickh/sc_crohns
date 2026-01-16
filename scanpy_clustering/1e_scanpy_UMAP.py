@@ -9,7 +9,10 @@ import scanpy as sc
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
+print("SCRIPT STARTED", flush=True)
+
 SCANPY_OBJECT_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy"
+
 adata = sc.read_h5ad(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_clustered.h5ad"))
 
 UMAP_PATH = os.path.join(SCANPY_OBJECT_PATH, "UMAP_plots")
@@ -67,11 +70,12 @@ def plot_umaps_for_grid(
                 out_png = os.path.join(dr_out, f"{basis}__r{r}.png")
                 base_title = f"{dr} | k={k} | r={r}"
 
-                colors = [cl_key, "sample_id", "crohns_or_normal"]
+                colors = [cl_key, "sample_id", "crohns_or_normal", "predicted_doublet"]
                 titles = [
                     f"{base_title} | clusters",
                     f"{base_title} | sample_id",
                     f"{base_title} | crohns/normal",
+                    f"{base_title} | predicted doublet",
                 ]
 
                 fig = sc.pl.embedding(
@@ -79,15 +83,15 @@ def plot_umaps_for_grid(
                     basis=basis,
                     color=colors,
                     title=titles,
-                    ncols=3,
+                    ncols=4,
                     legend_loc="right margin",
                     legend_fontsize=7,
                     show=False,
                     return_fig=True,
                 )
 
-                fig.set_size_inches(7.0 * 3, 6.0)  # figure size
-                fig.subplots_adjust(wspace=0.8)  # panel spacing
+                fig.set_size_inches(7.0 * 4, 6.0)  # figure size for 4 panels
+                fig.subplots_adjust(wspace=0.8)
 
                 fig.savefig(out_png, dpi=150, bbox_inches="tight", pad_inches=0.4)
                 plt.close(fig)
@@ -108,6 +112,11 @@ disps = [0.25, 0.5, 0.75, 1]
 n_features = [500, 1000, 2000, 3000]
 neighbors = [10, 20, 30, 50]
 res = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+
+
+s = adata.obs["predicted_doublet"]
+print("unique:", pd.unique(s)[:10], flush=True)
+print("value_counts:\n", s.value_counts(dropna=False), flush=True)
 
 adata = plot_umaps_for_grid(
     adata,
