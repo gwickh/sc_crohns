@@ -237,7 +237,11 @@ def call_doublet(sample, gaussian_intersection) -> sc.AnnData:
             "doublet",
             "singlet",
         )
-        print(f"Doublet threshold for {sample_id}: {threshold:.3f}")
+        print(
+            f"Doublet threshold for {sample_id}: {threshold:.3f}",
+            f"Predicted doublet fraction for {sample_id}: {(sample.obs['predicted_doublet'] == 'doublet').sum()}"
+            f"Predicted singlet fraction for {sample_id}: {(sample.obs['predicted_doublet'] == 'singlet').sum()}",
+        )
 
     return sample
 
