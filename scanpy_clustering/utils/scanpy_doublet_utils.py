@@ -29,17 +29,22 @@ def score_preprocessing(sample, transformation="raw") -> np.ndarray:
     # transform scores to fit GMM better
     eps = 1e-10
     p = np.clip(scores, eps, 1 - eps)
+    print(transformation)
 
     if transformation == "log":
+        print("Using log transformation")
         transformed_scores = np.log1p(scores + eps)
 
     elif transformation == "logit":
+        print("Using logit transformation")
         transformed_scores = np.log(p / (1 - p))
 
     elif transformation == "probit":
+        print("Using probit transformation")
         transformed_scores = norm.ppf(scores + eps)
 
     elif transformation == "raw":
+        print("Using raw scores")
         transformed_scores = scores
 
     else:
@@ -114,14 +119,17 @@ def backtransform_threshold(
     gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
 ) -> None:
     """
-    Backtransform threshold to original score space.
+    Backtransform threshold + x grid + component PDFs to the original score space.
+      - "log":    y = log1p(s)     => s = expm1(y),   ds/dy = exp(y) = 1+s
+      - "logit":  y = logit(s)     => s = sigmoid(y), ds/dy = s(1-s)
+      - "probit": y = Φ^{-1}(s)    => s = Φ(y),       ds/dy = φ(y)
     """
     if transformation == "log":
         transformed_scores = np.expm1(transformed_scores)
         gaussian_intersection = np.expm1(gaussian_intersection)
 
-        comp1_pdf = comp1_pdf * 1 / (1 + np.expm1(x))
-        comp2_pdf = comp2_pdf * 1 / (1 + np.expm1(x))
+        comp1_pdf = comp1_pdf / (1 + np.expm1(x))
+        comp2_pdf = comp2_pdf / (1 + np.expm1(x))
 
         x = np.expm1(x)
 
@@ -129,20 +137,23 @@ def backtransform_threshold(
         transformed_scores = 1 / (1 + np.exp(-transformed_scores))
         gaussian_intersection = 1 / (1 + np.exp(-gaussian_intersection))
 
-        term = 1 + np.exp(-x)
-        comp1_pdf = comp1_pdf * 1 / (1 / term) * (1 - 1 / term)
-        comp2_pdf = comp2_pdf * 1 / (1 / term) * (1 - 1 / term)
+        x_expit = 1 / (1 + np.exp(-x))
 
-        x = 1 / (1 + np.exp(-x))
+        comp1_pdf = comp1_pdf / x_expit * (1 - x_expit)
+        comp2_pdf = comp2_pdf / x_expit * (1 - x_expit)
+
+        x = x_expit
 
     elif transformation == "probit":
         transformed_scores = norm.cdf(transformed_scores)
         gaussian_intersection = norm.cdf(gaussian_intersection)
 
-        comp1_pdf = comp1_pdf * 1 / norm.pdf(x)
-        comp2_pdf = comp2_pdf * 1 / norm.pdf(x)
+        comp1_pdf = comp1_pdf / norm.pdf(x)
+        comp2_pdf = comp2_pdf / norm.pdf(x)
 
         x = norm.cdf(x)
+
+    return gaussian_intersection, transformed_scores, x, comp1_pdf, comp2_pdf
 
 
 def compute_threshold(
@@ -171,7 +182,6 @@ def compute_threshold(
 
     # Calculate threshold at intersection of components
     intersection_points = np.where(np.diff(np.sign(comp1_pdf - comp2_pdf)) != 0)[0]
-    print(intersection_points)
 
     if intersection_points.size == 0:
         print(
@@ -193,13 +203,15 @@ def compute_threshold(
 
     # Backtransform to original space
     if backtransform is True:
-        backtransform_threshold(
-            gaussian_intersection,
-            transformation,
-            transformed_scores,
-            x,
-            comp1_pdf,
-            comp2_pdf,
+        gaussian_intersection, transformed_scores, x, comp1_pdf, comp2_pdf = (
+            backtransform_threshold(
+                gaussian_intersection,
+                transformation,
+                transformed_scores,
+                x,
+                comp1_pdf,
+                comp2_pdf,
+            )
         )
 
     # Components in count scale
@@ -211,22 +223,26 @@ def compute_threshold(
     return gaussian_intersection, transformed_scores, x, comp1, comp2
 
 
-def call_doublet(sample, gaussian_intersection) -> sc.AnnData:
+def call_doublet(sample, bt_gaussian_intersection) -> sc.AnnData:
     """
     Utility to call doublets based on GMM threshold.
     """
-    if gaussian_intersection is None:
+    if bt_gaussian_intersection is None:
         raise ValueError("No threshold found; cannot call doublets.")
     else:
         sample_id = sample.obs["sample_id"].iloc[0]
-        threshold = float(gaussian_intersection)
+        threshold = float(bt_gaussian_intersection)
 
         sample.obs["predicted_doublet"] = np.where(
             sample.obs["doublet_score"] >= threshold,
             "doublet",
             "singlet",
         )
-        print(f"Doublet threshold for {sample_id}: {threshold:.3f}")
+        print(
+            f"Doublet threshold for {sample_id}: {threshold:.3f}",
+            f"Predicted doublet fraction for {sample_id}: {(sample.obs['predicted_doublet'] == 'doublet').sum()}"
+            f"Predicted singlet fraction for {sample_id}: {(sample.obs['predicted_doublet'] == 'singlet').sum()}",
+        )
 
     return sample
 

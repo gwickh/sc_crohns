@@ -28,7 +28,7 @@ scripts=(
     # "1e_scanpy_UMAP.py"
 )
 
-
+export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"
 for script in "${scripts[@]}"; do
     echo "Running ${script}"
     python "${SCRIPT_DIR}/${script}" \

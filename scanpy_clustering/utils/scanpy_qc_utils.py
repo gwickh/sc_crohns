@@ -1,7 +1,6 @@
 import os
 from glob import glob
 
-import anndata as ad
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -40,7 +39,7 @@ def load_count_matrices(path) -> list:
         adata.obs_names = [
             f"{sample}_{bc}" for bc in adata.obs_names
         ]  # make barcodes unique
-        adata.raw = adata  # store raw counts
+        adata.raw = adata.copy()  # store raw counts
         adata_list.append(adata)
     return adata_list
 
@@ -181,7 +180,7 @@ def create_mad_mask(adata_list, sample, metric, nmads=3) -> np.ndarray:
 
 
 # Apply MAD filtering across samples
-def mad_filter(adata_list, qc_dict, nmads=3) -> list:
+def mad_filter(adata_list, qc_dict) -> list:
     """
     Compute MAD boolean masks and filter per sample
     """
