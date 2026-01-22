@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+from matplotlib.pylab import exp
 from scipy.stats import median_abs_deviation, norm
 from sklearn.mixture import GaussianMixture
 
@@ -40,17 +41,22 @@ def score_preprocessing(sample, transformation="raw") -> np.ndarray:
     # transform scores to fit GMM better
     eps = 1e-10
     p = np.clip(scores, eps, 1 - eps)
+    print(transformation)
 
     if transformation == "log":
+        print("Using log transformation")
         transformed_scores = np.log1p(scores + eps)
 
     elif transformation == "logit":
+        print("Using logit transformation")
         transformed_scores = np.log(p / (1 - p))
 
     elif transformation == "probit":
+        print("Using probit transformation")
         transformed_scores = norm.ppf(scores + eps)
 
     elif transformation == "raw":
+        print("Using raw scores")
         transformed_scores = scores
 
     else:
@@ -125,14 +131,17 @@ def backtransform_threshold(
     gaussian_intersection, transformation, transformed_scores, x, comp1_pdf, comp2_pdf
 ) -> None:
     """
-    Backtransform threshold to original score space.
+    Backtransform threshold + x grid + component PDFs to the original score space.
+      - "log":    y = log1p(s)     => s = expm1(y),   ds/dy = exp(y) = 1+s
+      - "logit":  y = logit(s)     => s = sigmoid(y), ds/dy = s(1-s)
+      - "probit": y = Φ^{-1}(s)    => s = Φ(y),       ds/dy = φ(y)
     """
     if transformation == "log":
         transformed_scores = np.expm1(transformed_scores)
         gaussian_intersection = np.expm1(gaussian_intersection)
 
-        comp1_pdf = comp1_pdf * 1 / (1 + np.expm1(x))
-        comp2_pdf = comp2_pdf * 1 / (1 + np.expm1(x))
+        comp1_pdf = comp1_pdf / (1 + np.expm1(x))
+        comp2_pdf = comp2_pdf / (1 + np.expm1(x))
 
         x = np.expm1(x)
 
@@ -140,20 +149,23 @@ def backtransform_threshold(
         transformed_scores = 1 / (1 + np.exp(-transformed_scores))
         gaussian_intersection = 1 / (1 + np.exp(-gaussian_intersection))
 
-        term = 1 + np.exp(-x)
-        comp1_pdf = comp1_pdf * 1 / (1 / term) * (1 - 1 / term)
-        comp2_pdf = comp2_pdf * 1 / (1 / term) * (1 - 1 / term)
+        x_expit = 1 / (1 + np.exp(-x))
 
-        x = 1 / (1 + np.exp(-x))
+        comp1_pdf = comp1_pdf / x_expit * (1 - x_expit)
+        comp2_pdf = comp2_pdf / x_expit * (1 - x_expit)
+
+        x = x_expit
 
     elif transformation == "probit":
         transformed_scores = norm.cdf(transformed_scores)
         gaussian_intersection = norm.cdf(gaussian_intersection)
 
-        comp1_pdf = comp1_pdf * 1 / norm.pdf(x)
-        comp2_pdf = comp2_pdf * 1 / norm.pdf(x)
+        comp1_pdf = comp1_pdf / norm.pdf(x)
+        comp2_pdf = comp2_pdf / norm.pdf(x)
 
         x = norm.cdf(x)
+
+    return gaussian_intersection, transformed_scores, x, comp1_pdf, comp2_pdf
 
 
 def compute_threshold(
@@ -182,7 +194,6 @@ def compute_threshold(
 
     # Calculate threshold at intersection of components
     intersection_points = np.where(np.diff(np.sign(comp1_pdf - comp2_pdf)) != 0)[0]
-    print(intersection_points)
 
     if intersection_points.size == 0:
         print(
@@ -204,13 +215,15 @@ def compute_threshold(
 
     # Backtransform to original space
     if backtransform is True:
-        backtransform_threshold(
-            gaussian_intersection,
-            transformation,
-            transformed_scores,
-            x,
-            comp1_pdf,
-            comp2_pdf,
+        gaussian_intersection, transformed_scores, x, comp1_pdf, comp2_pdf = (
+            backtransform_threshold(
+                gaussian_intersection,
+                transformation,
+                transformed_scores,
+                x,
+                comp1_pdf,
+                comp2_pdf,
+            )
         )
 
     # Components in count scale
@@ -222,15 +235,15 @@ def compute_threshold(
     return gaussian_intersection, transformed_scores, x, comp1, comp2
 
 
-def call_doublet(sample, gaussian_intersection) -> sc.AnnData:
+def call_doublet(sample, bt_gaussian_intersection) -> sc.AnnData:
     """
     Utility to call doublets based on GMM threshold.
     """
-    if gaussian_intersection is None:
+    if bt_gaussian_intersection is None:
         raise ValueError("No threshold found; cannot call doublets.")
     else:
         sample_id = sample.obs["sample_id"].iloc[0]
-        threshold = float(gaussian_intersection)
+        threshold = float(bt_gaussian_intersection)
 
         sample.obs["predicted_doublet"] = np.where(
             sample.obs["doublet_score"] >= threshold,
@@ -481,7 +494,7 @@ def load_count_matrices(path) -> list:
         adata.obs_names = [
             f"{sample}_{bc}" for bc in adata.obs_names
         ]  # make barcodes unique
-        adata.raw = adata  # store raw counts
+        adata.raw = adata.copy()  # store raw counts
         adata_list.append(adata)
     return adata_list
 
@@ -692,7 +705,7 @@ OUTPATH = os.path.join(
     "project-area/data/crohns_scrnaseq/10c_14n_analysis", "scanpy", "qc_stats"
 )
 
-os.makedirs(OUTPATH) if not os.path.exists(OUTPATH) else None
+os.makedirs(OUTPATH, exist_ok=True)
 
 # Check if adata_merged already exists, if true then end script
 if os.path.exists(os.path.join(OUTPATH, "adata_merged.h5ad")):
@@ -748,7 +761,6 @@ adata.layers["counts"] = adata.X.copy()
 
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
-adata.raw = adata
 
 # Save merged AnnData object
 adata.write_h5ad(os.path.join(os.path.dirname(OUTPATH), "adata_merged.h5ad"))
