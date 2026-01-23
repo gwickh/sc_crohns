@@ -22,10 +22,10 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    "1a_scanpy_load_matrices.py"
-    # "1b_scanpy_PCA.py"
-    # "1c_scanpy_clustering.py"
-    # "1e_scanpy_UMAP.py"
+    # "1a_scanpy_load_matrices.py"
+    "1b_scanpy_PCA.py"
+    "1c_scanpy_clustering.py"
+    "1e_scanpy_UMAP.py"
 )
 
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"

@@ -129,4 +129,4 @@ adata = plot_umaps_for_grid(
 )
 
 
-adata.write(os.path.join(UMAP_PATH, "adata_umap.h5ad"))
+adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_umap.h5ad"))

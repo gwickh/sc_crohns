@@ -61,10 +61,10 @@ def pca_dispersion(
     disps,
     xmin,
     xmax,
-    dr_list,
-    vfeature_objects,
     s_genes,
     g2m_genes,
+    dr_list=dr_list,
+    vfeature_objects=vfeature_objects,
 ) -> an.AnnData:
     """
     # Loop over dispersion cutoffs using mean.var.plot equivalent
@@ -100,7 +100,13 @@ def pca_dispersion(
 
 
 def pca_varfeatures(
-    adata, PCA_OUTPUT_PATH, n_features, dr_list, vfeature_objects, s_genes, g2m_genes
+    adata,
+    PCA_OUTPUT_PATH,
+    n_features,
+    s_genes,
+    g2m_genes,
+    dr_list=dr_list,
+    vfeature_objects=vfeature_objects,
 ) -> an.AnnData:
     for n in n_features:
         method_name = f"vst_top_{n}"
@@ -129,6 +135,7 @@ def plot_elbow_plots(adata, PCA_OUTPUT_PATH, dr_list=dr_list) -> None:
     # Plot elbow plots
     """
     for dr in dr_list:
+        print(f"Plotting elbow plot for {dr}...")
         var_ratio = adata.uns[f"{dr}_pca"]["variance_ratio"]
         fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(18, 5))
         axs.plot(np.arange(1, len(var_ratio) + 1), var_ratio, marker="o")
@@ -146,6 +153,7 @@ def plot_pca_loadings(adata, PCA_OUTPUT_PATH, dr_list=dr_list) -> None:
     # Plot PC loadings
     """
     for dr in dr_list:
+        print(f"Plotting PCA loadings for {dr}...")
         pcs = adata.varm[f"{dr}_PCs"]  # shape: (n_genes, n_pcs)
         genes = adata.var_names
 
@@ -190,15 +198,12 @@ def plot_variable_feature_plots(
     """
     # Variable feature plots
     """
-    fig, axs = plt.subplots(
-        nrows=1, ncols=min(len(vfeature_objects), 5), figsize=(18, 5)
-    )
-    axs = axs.flatten()
-
-    for i, (name, features) in enumerate(vfeature_objects.items()):
-        sc.pl.highly_variable_genes(adata, ax=axs[i], show=False)
-        axs[i].set_title(name, fontsize=10)
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(PCA_OUTPUT_PATH, "v_features.png"), dpi=300)
-    plt.close()
+    for name, features in vfeature_objects.items():
+        sc.pl.highly_variable_genes(adata, show=False)
+        plt.title(name, fontsize=10)
+        plt.savefig(
+            os.path.join(PCA_OUTPUT_PATH, f"hvg_{name}.png"),
+            dpi=200,
+            bbox_inches="tight",
+        )
+        plt.close()
