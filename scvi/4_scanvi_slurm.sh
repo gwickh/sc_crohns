@@ -8,7 +8,7 @@
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-long
+#SBATCH --partition=ei-medium
 
 # Usage: sbatch sc_crohns/scvi/4_scanvi_slurm.sh sc_crohns/scvi/ project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/
 

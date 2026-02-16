@@ -5,7 +5,7 @@ import os
 import numpy as np
 import pandas as pd
 
-PATH = "project-area/data/crohns_scrnaseq/scvi_tools_output/Integrated_05_label"
+PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output"
 label =  "Integrated_05" # "category" 
 adata = sc.read_h5ad(os.path.join(PATH, "query_concat.h5ad"))
 REDUCT_NAME = "X_embeddings"+label
