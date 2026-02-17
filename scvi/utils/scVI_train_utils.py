@@ -49,7 +49,6 @@ def scvi_train(
         adata,
         batch_key="batch",
         continuous_covariate_keys=["pct_counts_mt"],
-        categorical_covariate_keys=["10X"],
     )
 
     arches_params = {

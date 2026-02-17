@@ -23,8 +23,7 @@ source ~/.bashrc
 conda activate python_scripts
 scripts=(
     "4a_scvi_ref.py"
-    # "4b_scanvi_ref.py"
-    # "4c_scanvi_query.py"
+    "4b_label_transfer.py"
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
