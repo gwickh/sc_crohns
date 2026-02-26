@@ -5,12 +5,11 @@ import anndata as ad
 import pandas as pd
 import scanpy as sc
 from ray import tune
-
-from scvi.utils.scVI_hyperparameter_search_utils import (
+from utils.scVI_hyperparameter_search_utils import (
     plot_learning_curves,
     scvi_hyperparameter_search,
 )
-from scvi.utils.scVI_train_utils import (
+from utils.scVI_train_utils import (
     load_ref_obj,
     scvi_get_embeddings_and_normalized_expression,
     scvi_train,

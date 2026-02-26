@@ -22,7 +22,7 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    "4a_scvi_ref.py"
+    "4a_generate_latent_space.py"
     "4b_label_transfer.py"
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"

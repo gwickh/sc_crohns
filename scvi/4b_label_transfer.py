@@ -1,13 +1,15 @@
 import os
 
 import anndata as ad
+import matplotlib.pyplot as plt
 import pandas as pd
 import scanpy as sc
-
-from scvi.utils.scANVI_train_classifier_utils import (
+from utils.scANVI_train_classifier_utils import (
     train_scanvi_query,
     train_scanvi_ref,
 )
+
+import scvi
 
 # set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
 pd.options.mode.string_storage = "python"
@@ -21,7 +23,9 @@ ADATA_OBJ_PATH = (
 )
 
 adata = sc.read_h5ad(ADATA_OBJ_PATH)
+adata = adata[adata.obs["platform"] == "Parse"].copy()
 adata = adata[adata.obs["predicted_doublet"] != "doublet"].copy()
+adata.obs["batch"] = adata.obs["platform"]
 
 train_scanvi_ref(SCVI_PATH)
 train_scanvi_query(adata, SCVI_PATH)
