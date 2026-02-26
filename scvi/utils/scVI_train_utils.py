@@ -96,8 +96,5 @@ def scvi_get_embeddings_and_normalized_expression(
     Get scVI latent embeddings and normalized expression and add to adata.
     """
     adata.obsm["X_embeddings"] = model.get_latent_representation(adata=adata)
-    # adata.layers["normalized_expression"] = model.get_normalized_expression(
-    # adata=adata, library_size=1e6
-    # )
     adata.write_h5ad(f"{SCVI_PATH}/gca_ref_scvi.h5ad")
     return adata
