@@ -16,7 +16,7 @@ PROJECT_AREA = "project-area/data/crohns_scrnaseq/3c_4n_analysis"
 h5ad_path = os.path.join(PROJECT_AREA, "scvi_tools_output/Integrated_05_label")
 
 
-def load_count_matrices(path) -> list:
+def load_count_matrices(path: str) -> list:
     """
     Load count matrices from given path into AnnData objects.
     """
@@ -68,11 +68,16 @@ full_ad = ad.concat(
     join="outer",
     merge="unique",
 )
+
+# load annotated query data
 raw_ad = sc.read_h5ad(os.path.join(h5ad_path, "query_concat_curated.h5ad"))
 
 
-# robust 10x-core barcode extractor
+# strip sample id from barcodes to match 10x format
 def core10x(x: str) -> str:
+    """
+    Extract the core 10x barcode from a string, handling various formats.
+    """
     m = re.search(r"([ACGT]{16})(?:-(\d+))?", str(x))
     if not m:
         return str(x)
@@ -83,7 +88,7 @@ def core10x(x: str) -> str:
 raw_core = pd.Index([core10x(x) for x in raw_ad.obs_names])
 full_core = pd.Index([core10x(x) for x in full_ad.obs_names])
 
-# map core -> first matching full barcode (OK if full_ad is single-sample)
+# map core barcode to first matching full barcode
 full_lookup = {}
 for c, orig in zip(full_core, full_ad.obs_names):
     full_lookup.setdefault(c, orig)
@@ -96,13 +101,10 @@ print("matched:", sum(keep), "/", raw_ad.n_obs)
 raw_sub = raw_ad[keep].copy()
 full_sub = full_ad[[m for m in mapped if m is not None], :].copy()
 
-# keep your annotations
 full_sub.obs = raw_sub.obs.copy()
-full_sub.obs_names = raw_sub.obs_names  # keep your original barcode strings
+full_sub.obs_names = raw_sub.obs_names
 
 raw_ad = full_sub
-print("raw_ad genes:", raw_ad.n_vars)
-print("layers:", list(raw_ad.layers.keys()))
 
 
 def h5ad_to_10x(
@@ -121,7 +123,7 @@ def h5ad_to_10x(
         X = sparse.csr_matrix(X)
     X = X.astype(np.int32)
 
-    # features.tsv.gz: feature_id, feature_name, feature_type (NO HEADER)
+    # features.tsv.gz
     genes = pd.DataFrame(
         {
             0: ad.var[gene_id_key].astype(str).values,  # feature_id
@@ -132,14 +134,14 @@ def h5ad_to_10x(
         }
     )
 
-    # barcodes.tsv.gz: one per line (NO HEADER)
+    # barcodes.tsv.gz
     barcodes = (
         pd.DataFrame(ad.obs[barcode_key].astype(str).values)
         if barcode_key
         else pd.DataFrame(ad.obs_names.astype(str))
     )
 
-    # annotation CSV: EXACT required column names
+    # annotation CSV
     ann = pd.DataFrame(
         {
             "Barcode": ad.obs_names.astype(str),
