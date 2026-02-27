@@ -12,41 +12,22 @@ h5ad_path = os.path.join(
 OUTPATH = os.path.join(PROJECT_AREA, "marker_selection")
 os.makedirs(OUTPATH, exist_ok=True)
 
-adata = sc.read_h5ad(h5ad_path)
-
-# load list of genes in Xenium core panel
-to_drop = pd.read_csv(
-    os.path.join(OUTPATH, "XeniumPrimeHuman5Kpan_tissue_pathways_metadata.csv")
-).columns[0]
-
-# drop tiny groups
+# drop tiny groups params
 min_cells = 25
 use_raw = False
 layer = None
 
-vc = adata.obs["curated"].value_counts()
-keep = vc[vc >= min_cells].index
-adata = adata[adata.obs["curated"].isin(keep)].copy()
-
-# choose matrix
-if layer is not None:
-    adata.X = adata.layers[layer]
-    use_raw = False
-
-sc.pp.normalize_total(adata, target_sum=1e4)
-sc.pp.log1p(adata)
-
 
 # compute identity markers (one-vs-rest per group)
 def identity_markers(
-    adata=adata,
+    adata,
+    to_drop,
     use_raw=False,
-    to_drop=to_drop,
     OUTPATH=OUTPATH,
     groupby="curated",
     method="wilcoxon",
     n_markers=50,
-):
+) -> None:
     sc.tl.rank_genes_groups(
         adata,
         groupby=groupby,
@@ -63,7 +44,7 @@ def identity_markers(
     g2i = {g: i for i, g in enumerate(var_names)}
     labels = adata.obs[groupby].astype(str).values
 
-    def pct(mask, gene):
+    def pct(mask, gene) -> float:
         j = g2i.get(gene)
         if j is None:
             return np.nan
@@ -96,14 +77,14 @@ def identity_markers(
 
 # compute diagnosis markers within each cell type
 def deg_markers(
-    adata=adata,
+    adata,
+    to_drop,
     use_raw=False,
-    to_drop=to_drop,
     OUTPATH=OUTPATH,
     groupby="diagnosis",
     method="wilcoxon",
     n_markers=200,
-):
+) -> None:
     sid = adata.obs["sample_id"].astype(str)
     status = np.where(
         sid.str.contains("C", case=False, na=False),
@@ -142,3 +123,30 @@ def deg_markers(
     de_filtered = de[~de["names"].astype(str).isin(set(to_drop))].copy()
 
     de_filtered.to_csv(os.path.join(OUTPATH, "markers_diagnosis.csv"), index=False)
+
+
+def main() -> None:
+    adata = sc.read_h5ad(h5ad_path)
+
+    # load list of genes in Xenium core panel
+    to_drop = pd.read_csv(
+        os.path.join(OUTPATH, "XeniumPrimeHuman5Kpan_tissue_pathways_metadata.csv")
+    ).iloc[:, 0]
+
+    vc = adata.obs["curated"].value_counts()
+    keep = vc[vc >= min_cells].index
+    adata = adata[adata.obs["curated"].isin(keep)].copy()
+
+    # choose matrix
+    if layer is not None:
+        adata.X = adata.layers[layer]
+
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+
+    identity_markers(adata, to_drop)
+    deg_markers(adata, to_drop)
+
+
+if __name__ == "__main__":
+    main()

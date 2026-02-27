@@ -8,7 +8,7 @@
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-long
 
 # Usage: sbatch sc_crohns/scvi/4_scanvi_slurm.sh sc_crohns/scvi/ project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/
 
@@ -22,11 +22,12 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    "4a_generate_latent_space.py"
-    "4b_label_transfer.py"
+    # "4a_generate_latent_space.py"
+    # "4b_label_transfer.py"
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
+    xenium_marker_selection.py
 )
 
 for script in "${scripts[@]}"; do

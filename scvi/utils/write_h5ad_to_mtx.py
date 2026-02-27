@@ -16,6 +16,7 @@ PROJECT_AREA = "project-area/data/crohns_scrnaseq/3c_4n_analysis"
 h5ad_path = os.path.join(PROJECT_AREA, "scvi_tools_output/Integrated_05_label")
 
 
+# load count matrices from given path into AnnData objects
 def load_count_matrices(path: str) -> list:
     """
     Load count matrices from given path into AnnData objects.
@@ -29,7 +30,7 @@ def load_count_matrices(path: str) -> list:
                     recursive=True,
                 )
             )
-            if not os.path.isdir(p) and os.path.basename(p).endswith((".h5", ".h5ad"))
+            if not os.path.isdir(p) and os.path.basename(p).endswith((".h5"))
         ]
     )
     sample_names = [
@@ -38,10 +39,7 @@ def load_count_matrices(path: str) -> list:
 
     adata_list = []
     for path, sample in zip(matrix_paths, sample_names):
-        if ".h5ad" in path:
-            adata = sc.read_h5ad(path)
-            adata.obs["platform"] = "Parse"
-        elif ".h5" in path:
+        if ".h5" in path:
             adata = sc.read_10x_h5(path)
             adata.obs["platform"] = "10X_Chromium"
             adata.var["gene_name"] = adata.var.index
@@ -57,20 +55,29 @@ def load_count_matrices(path: str) -> list:
     return adata_list
 
 
-adata_list = load_count_matrices(
-    "project-area/data/crohns_scrnaseq/3c_4n_analysis/crohns_samples"
-)
+def match_barcodes(raw_ad, full_ad) -> ad.AnnData:
+    raw_core = pd.Index([core10x(x) for x in raw_ad.obs_names])
+    full_core = pd.Index([core10x(x) for x in full_ad.obs_names])
 
-full_ad = ad.concat(
-    adata_list,
-    label="sample_id",
-    keys=[a.obs["sample_id"].iloc[0] for a in adata_list],
-    join="outer",
-    merge="unique",
-)
+    # map core barcode to first matching full barcode
+    full_lookup = {}
+    for c, orig in zip(full_core, full_ad.obs_names):
+        full_lookup.setdefault(c, orig)
 
-# load annotated query data
-raw_ad = sc.read_h5ad(os.path.join(h5ad_path, "query_concat_curated.h5ad"))
+    mapped = [full_lookup.get(c, None) for c in raw_core]
+    keep = [m is not None for m in mapped]
+
+    print("matched:", sum(keep), "/", raw_ad.n_obs)
+
+    raw_sub = raw_ad[keep].copy()
+    full_sub = full_ad[[m for m in mapped if m is not None], :].copy()
+
+    full_sub.obs = raw_sub.obs.copy()
+    full_sub.obs_names = raw_sub.obs_names
+
+    raw_ad = full_sub
+
+    return raw_ad
 
 
 # strip sample id from barcodes to match 10x format
@@ -85,36 +92,18 @@ def core10x(x: str) -> str:
     return f"{m.group(1)}-{suf}"
 
 
-raw_core = pd.Index([core10x(x) for x in raw_ad.obs_names])
-full_core = pd.Index([core10x(x) for x in full_ad.obs_names])
-
-# map core barcode to first matching full barcode
-full_lookup = {}
-for c, orig in zip(full_core, full_ad.obs_names):
-    full_lookup.setdefault(c, orig)
-
-mapped = [full_lookup.get(c, None) for c in raw_core]
-keep = [m is not None for m in mapped]
-
-print("matched:", sum(keep), "/", raw_ad.n_obs)
-
-raw_sub = raw_ad[keep].copy()
-full_sub = full_ad[[m for m in mapped if m is not None], :].copy()
-
-full_sub.obs = raw_sub.obs.copy()
-full_sub.obs_names = raw_sub.obs_names
-
-raw_ad = full_sub
-
-
+# convert h5ad to 10x format and save as mtx in zip file with accompanying features and barcodes files
 def h5ad_to_10x(
     ad,
-    gene_id_key="gene_ids",  # Ensembl IDs
+    gene_id_key="gene_ids",
     cell_type_key="curated",
     output_path=os.path.join(PROJECT_AREA, "marker_selection/matrix.zip"),
     barcode_key=None,
     subsample_rate=None,
 ):
+    """
+    Convert an AnnData object to 10x format and save as mtx in zip file with accompanying features and barcodes files.
+    """
     if subsample_rate:
         sc.pp.subsample(ad, subsample_rate)
 
@@ -179,12 +168,32 @@ def h5ad_to_10x(
                 zip_handle.write(os.path.join(tmp_dir, fn), arcname=fn)
 
 
-# call
-h5ad_to_10x(raw_ad, gene_id_key="gene_ids", cell_type_key="curated")
+def main() -> None:
+    # load and concatenate all count matrices
+    adata_list = load_count_matrices(
+        "project-area/data/crohns_scrnaseq/3c_4n_analysis/crohns_samples"
+    )
 
-h5ad_to_10x(
-    raw_ad,
-    gene_id_key="gene_ids",
-    gene_name_key="feature_types",
-    cell_type_key="curated",
-)
+    full_ad = ad.concat(
+        adata_list,
+        keys=[a.obs["sample_id"].iloc[0] for a in adata_list],
+        join="outer",
+        merge="unique",
+    )
+
+    # load annotated query data
+    raw_ad = sc.read_h5ad(os.path.join(h5ad_path, "query_concat_curated.h5ad"))
+
+    # match barcodes between raw and full data, keeping only those that match
+    raw_ad = match_barcodes(raw_ad, full_ad)
+
+    # convert to 10x format and save as mtx in zip file with features and barcodes files
+    h5ad_to_10x(
+        raw_ad,
+        gene_id_key="gene_ids",
+        cell_type_key="curated",
+    )
+
+
+if __name__ == "__main__":
+    main()
