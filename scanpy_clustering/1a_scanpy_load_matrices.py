@@ -26,11 +26,6 @@ if os.path.exists(os.path.join(OUTPATH, "adata_merged.h5ad")):
     print("adata_merged already created, skipping")
     exit()
 
-# Load matrix paths and sample names
-adata_list = load_count_matrices(MATRIX_DIR)
-
-adata_list_raw = [adata.copy() for adata in adata_list]
-
 # Run preprocessing steps
 qc_dict = {
     "Number of genes": "n_genes_by_counts",
@@ -39,42 +34,52 @@ qc_dict = {
     "Percent ribosomal reads": "pct_counts_ribo",
 }
 
-adata_list = filter_low_count_cells(adata_list)
 
-adata_list_raw = compute_qc_metrics(adata_list_raw)
-adata_list = compute_qc_metrics(adata_list)
+def main() -> None:
+    # Load matrix paths and sample names
+    adata_list = load_count_matrices(MATRIX_DIR)
 
-adata_list_filtered = mad_filter(adata_list, qc_dict)
+    adata_list_raw = [adata.copy() for adata in adata_list]
+    adata_list = filter_low_count_cells(adata_list)
 
-adata_list_filtered = run_scrublet(adata_list_filtered)
+    adata_list_raw = compute_qc_metrics(adata_list_raw)
+    adata_list = compute_qc_metrics(adata_list)
 
-adata_list_filtered = calculate_doublet_threshold(
-    adata_list_filtered, outpath=OUTPATH, transformation=["probit"], bins=50
-)
+    adata_list_filtered = mad_filter(adata_list, qc_dict)
 
-obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, OUTPATH)
+    adata_list_filtered = run_scrublet(adata_list_filtered)
 
-stages_dict = {
-    "Raw": adata_list_raw,
-    "Background filtering": adata_list,
-    "Platform-level MAD filtering": adata_list_filtered,
-}
+    adata_list_filtered = calculate_doublet_threshold(
+        adata_list_filtered, outpath=OUTPATH, transformation=["probit"], bins=50
+    )
 
-qc_plots(stages_dict, qc_dict, OUTPATH)
+    obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, OUTPATH)
 
-# # Merge filtered AnnData objects
-adata = ad.concat(
-    adata_list_filtered,
-    label="sample_id",
-    keys=[a.obs["sample_id"].iloc[0] for a in adata_list_filtered],
-    join="outer",
-    merge="unique",
-)
+    stages_dict = {
+        "Raw": adata_list_raw,
+        "Background filtering": adata_list,
+        "Platform-level MAD filtering": adata_list_filtered,
+    }
 
-adata.layers["counts"] = adata.X.copy()
+    qc_plots(stages_dict, qc_dict, OUTPATH)
 
-sc.pp.normalize_total(adata, target_sum=1e4)
-sc.pp.log1p(adata)
+    # Merge filtered AnnData objects
+    adata = ad.concat(
+        adata_list_filtered,
+        label="sample_id",
+        keys=[a.obs["sample_id"].iloc[0] for a in adata_list_filtered],
+        join="outer",
+        merge="unique",
+    )
 
-# Save merged AnnData object
-adata.write_h5ad(os.path.join(os.path.dirname(OUTPATH), "adata_merged.h5ad"))
+    adata.layers["counts"] = adata.X.copy()
+
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+
+    # Save merged AnnData object
+    adata.write_h5ad(os.path.join(os.path.dirname(OUTPATH), "adata_merged.h5ad"))
+
+
+if __name__ == "__main__":
+    main()

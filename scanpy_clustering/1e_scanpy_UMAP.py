@@ -9,25 +9,10 @@ import scanpy as sc
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
-print("SCRIPT STARTED", flush=True)
-
 SCANPY_OBJECT_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy"
 
-adata = sc.read_h5ad(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_clustered.h5ad"))
-
 UMAP_PATH = os.path.join(SCANPY_OBJECT_PATH, "UMAP_plots")
-os.makedirs(UMAP_PATH) if not os.path.exists(UMAP_PATH) else None
-
-
-sid = adata.obs["sample_id"].astype(str)
-status = np.where(
-    sid.str.contains("crohns", case=False, na=False),
-    "crohns",
-    np.where(sid.str.contains("normal", case=False, na=False), "normal", "other"),
-)
-adata.obs["crohns_or_normal"] = pd.Categorical(
-    status, categories=["normal", "crohns", "other"]
-)
+os.makedirs(UMAP_PATH, exist_ok=True)
 
 
 def plot_umaps_for_grid(
@@ -38,7 +23,7 @@ def plot_umaps_for_grid(
     res,
     UMAP_PATH,
     random_state=0,
-):
+) -> an.AnnData:
     had_umap = "X_umap" in adata.obsm
     umap_backup = adata.obsm["X_umap"].copy() if had_umap else None
 
@@ -108,25 +93,42 @@ def plot_umaps_for_grid(
     return adata
 
 
+# Parameters for variable gene selection
 disps = [0.25, 0.5, 0.75, 1]
 n_features = [500, 1000, 2000, 3000]
 neighbors = [10, 20, 30, 50]
 res = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
 
 
-s = adata.obs["predicted_doublet"]
-print("unique:", pd.unique(s)[:10], flush=True)
-print("value_counts:\n", s.value_counts(dropna=False), flush=True)
+def main() -> None:
+    adata = sc.read_h5ad(
+        os.path.join(SCANPY_OBJECT_PATH, "adata_merged_clustered.h5ad")
+    )
+    sid = adata.obs["sample_id"].astype(str)
+    status = np.where(
+        sid.str.contains("crohns", case=False, na=False),
+        "crohns",
+        np.where(sid.str.contains("normal", case=False, na=False), "normal", "other"),
+    )
+    adata.obs["crohns_or_normal"] = pd.Categorical(
+        status, categories=["normal", "crohns", "other"]
+    )
+    s = adata.obs["predicted_doublet"]
+    print("unique:", pd.unique(s)[:10], flush=True)
+    print("value_counts:\n", s.value_counts(dropna=False), flush=True)
 
-adata = plot_umaps_for_grid(
-    adata,
-    disps=disps,
-    n_features=n_features,
-    neighbors=neighbors,
-    res=res,
-    UMAP_PATH=UMAP_PATH,
-    random_state=0,
-)
+    adata = plot_umaps_for_grid(
+        adata,
+        disps=disps,
+        n_features=n_features,
+        neighbors=neighbors,
+        res=res,
+        UMAP_PATH=UMAP_PATH,
+        random_state=0,
+    )
+
+    adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_umap.h5ad"))
 
 
-adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_umap.h5ad"))
+if __name__ == "__main__":
+    main()

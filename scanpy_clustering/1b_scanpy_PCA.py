@@ -16,9 +16,6 @@ if os.path.exists(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_reduced.h5ad"))
     print("adata_merged_reduced already created, skipping")
     exit()
 
-# Load existing AnnData object
-adata = sc.read_h5ad(os.path.join(SCANPY_OBJECT_PATH, "adata_merged.h5ad"))
-
 # Create output directory
 PCA_OUTPUT_PATH = os.path.join(SCANPY_OBJECT_PATH, "PCA_stats")
 os.makedirs(PCA_OUTPUT_PATH) if not os.path.exists(PCA_OUTPUT_PATH) else None
@@ -133,28 +130,33 @@ n_features = [500, 1000, 2000, 3000]
 xmin = 0.1
 xmax = 10
 
-# Loop over dispersion cutoffs using mean.var.plot equivalent
-pca_dispersion(adata, PCA_OUTPUT_PATH, disps, xmin, xmax, s_genes, g2m_genes)
-
-# Loop over nfeatures with vst method
-pca_varfeatures(
-    adata,
-    PCA_OUTPUT_PATH,
-    n_features,
-    s_genes,
-    g2m_genes,
-)
-
-adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_reduced.h5ad"))
-
-# Plot elbow plots
-plot_elbow_plots(adata, PCA_OUTPUT_PATH)
-
-# Plot loadings (PC1-3)
+# Parameters for plotting
 n_pcs_to_plot = 5
 top_n = 10
 
-plot_pca_loadings(adata, PCA_OUTPUT_PATH)
 
-# Variable feature plots
-plot_variable_feature_plots(adata, PCA_OUTPUT_PATH)
+def main() -> None:
+    # Load existing AnnData object
+    adata = sc.read_h5ad(os.path.join(SCANPY_OBJECT_PATH, "adata_merged.h5ad"))
+    # Loop over dispersion cutoffs using mean.var.plot equivalent
+    pca_dispersion(adata, PCA_OUTPUT_PATH, disps, xmin, xmax, s_genes, g2m_genes)
+
+    # Loop over nfeatures with vst method
+    pca_varfeatures(
+        adata,
+        PCA_OUTPUT_PATH,
+        n_features,
+        s_genes,
+        g2m_genes,
+    )
+
+    adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_reduced.h5ad"))
+
+    # Plot elbow plots
+    plot_elbow_plots(adata, PCA_OUTPUT_PATH)
+
+    # Plot PCA loadings
+    plot_pca_loadings(adata, PCA_OUTPUT_PATH)
+
+    # Variable feature plots
+    plot_variable_feature_plots(adata, PCA_OUTPUT_PATH)
