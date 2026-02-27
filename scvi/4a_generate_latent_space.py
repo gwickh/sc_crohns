@@ -19,6 +19,8 @@ from utils.scVI_train_utils import (
 pd.options.mode.string_storage = "python"
 ad.settings.allow_write_nullable_strings = True
 
+
+# Define paths
 SCVI_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output"
 os.makedirs(SCVI_PATH, exist_ok=True)
 
@@ -29,18 +31,6 @@ LOG_PATH.mkdir(parents=True, exist_ok=True)
 
 GCA_OBJ_PATH = os.path.join(SCVI_PATH, "Full_obj_raw_counts_nosoupx_v2.h5ad")
 REF_OBJ_PATH = os.path.join(SCVI_PATH, "obj_healthy_adult_pediatric_TIL.h5ad")
-
-adata = load_ref_obj(GCA_OBJ_PATH, REF_OBJ_PATH)
-
-sc.pp.highly_variable_genes(
-    adata,
-    flavor="seurat_v3",
-    n_top_genes=5000,
-    batch_key="batch",
-    subset=True,
-)
-
-adata_full = adata.copy()
 
 # define hyperparameters
 search_space = {
@@ -72,30 +62,48 @@ scheduler_kwargs = {
     "reduction_factor": 2,
 }
 
-# # Run hyperparameter search
-# scvi_hyperparameter_search(
-#     adata,
-#     LOG_PATH,
-#     search_space,
-#     scheduler_kwargs,
-# )
 
-# plot_learning_curves(LOG_PATH, SCVI_PATH)
+def main() -> None:
+    adata = load_ref_obj(GCA_OBJ_PATH, REF_OBJ_PATH)
 
-# Train a final model with the best hyperparameters and get embeddings for downstream analysis
-model = scvi_train(
-    adata=adata,
-    SCVI_PATH=SCVI_PATH,
-    n_hidden=128,
-    n_latent=20,
-    n_layers=3,
-    dropout_rate=0.05,
-    max_epochs=100,
-    lr=1e-3,
-    weight_decay=5.441928187220108e-07,
-    eps=1e-2,
-)
+    sc.pp.highly_variable_genes(
+        adata,
+        flavor="seurat_v3",
+        n_top_genes=5000,
+        batch_key="batch",
+        subset=True,
+    )
 
-scvi_get_embeddings_and_normalized_expression(
-    adata=adata_full, model=model, SCVI_PATH=SCVI_PATH
-)
+    adata_full = adata.copy()
+
+    # Run hyperparameter search
+    scvi_hyperparameter_search(
+        adata,
+        LOG_PATH,
+        search_space,
+        scheduler_kwargs,
+    )
+
+    plot_learning_curves(LOG_PATH, SCVI_PATH)
+
+    # Train a final model with the best hyperparameters and get embeddings for downstream analysis
+    model = scvi_train(
+        adata=adata,
+        SCVI_PATH=SCVI_PATH,
+        n_hidden=128,
+        n_latent=20,
+        n_layers=3,
+        dropout_rate=0.05,
+        max_epochs=100,
+        lr=1e-3,
+        weight_decay=5.441928187220108e-07,
+        eps=1e-2,
+    )
+
+    scvi_get_embeddings_and_normalized_expression(
+        adata=adata_full, model=model, SCVI_PATH=SCVI_PATH
+    )
+
+
+if __name__ == "__main__":
+    main()
