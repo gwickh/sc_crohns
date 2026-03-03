@@ -55,12 +55,19 @@ def plot_umaps_for_grid(
                 out_png = os.path.join(dr_out, f"{basis}__r{r}.png")
                 base_title = f"{dr} | k={k} | r={r}"
 
-                colors = [cl_key, "sample_id", "crohns_or_normal", "predicted_doublet"]
+                colors = [
+                    cl_key,
+                    "sample_id",
+                    "crohns_or_normal",
+                    "predicted_doublet",
+                    "platform",
+                ]
                 titles = [
                     f"{base_title} | clusters",
                     f"{base_title} | sample_id",
                     f"{base_title} | crohns/normal",
                     f"{base_title} | predicted doublet",
+                    f"{base_title} | platform",
                 ]
 
                 fig = sc.pl.embedding(
@@ -68,14 +75,14 @@ def plot_umaps_for_grid(
                     basis=basis,
                     color=colors,
                     title=titles,
-                    ncols=4,
+                    ncols=5,
                     legend_loc="right margin",
                     legend_fontsize=7,
                     show=False,
                     return_fig=True,
                 )
 
-                fig.set_size_inches(7.0 * 4, 6.0)  # figure size for 4 panels
+                fig.set_size_inches(10 * 5, 6.0)
                 fig.subplots_adjust(wspace=0.8)
 
                 fig.savefig(out_png, dpi=150, bbox_inches="tight", pad_inches=0.4)
