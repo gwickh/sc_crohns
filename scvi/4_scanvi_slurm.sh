@@ -27,7 +27,7 @@ scripts=(
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
-    xenium_marker_selection.py
+    gene_set_intersection.py
 )
 
 for script in "${scripts[@]}"; do
