@@ -23,7 +23,6 @@ ADATA_OBJ_PATH = (
 
 def main():
     adata = sc.read_h5ad(ADATA_OBJ_PATH)
-    adata = adata[adata.obs["platform"] == "Parse"].copy()
     adata = adata[adata.obs["predicted_doublet"] != "doublet"].copy()
     adata.obs["batch"] = adata.obs["platform"]
 
