@@ -1,6 +1,7 @@
 import os
 from glob import glob
 
+import anndata as ad
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -241,3 +242,41 @@ def obtain_qc_stats(adata_list, adata_list_filtered, qc_dict, outpath) -> None:
 
     adata_df = pd.DataFrame(adata_stats)
     adata_df.to_csv(os.path.join(outpath, "qc_stats_mad_filtering.csv"), index=False)
+
+
+def concatenate_adata(adata_list) -> sc.AnnData:
+    """
+    Concatenate list of AnnData objects into a single AnnData object.
+    """
+    # unify Ensembl ID column
+    for adata in adata_list:
+        adata.var["ensembl_id"] = adata.var["gene_ids"].fillna(adata.var["gene_id"])
+
+        # drop rows with no Ensembl ID
+        keep = adata.var["ensembl_id"].notna()
+        adata = adata[:, keep].copy()
+
+        # set var_names to Ensembl IDs
+        adata.var_names = adata.var["ensembl_id"].astype(str)
+
+    adata = ad.concat(
+        adata_list,
+        label="sample_id",
+        keys=[a.obs["sample_id"].iloc[0] for a in adata_list],
+        join="outer",
+        merge="unique",
+    )
+
+    # raise error if duplicate ensembl IDs present after concatenation
+    duplicates = adata.var["ensembl_id"].duplicated(keep=False)
+    if duplicates.any():
+        dup_ids = adata.var.loc[duplicates, "ensembl_id"]
+        dup_counts = dup_ids.value_counts()
+
+        raise ValueError(
+            "Duplicate Ensembl IDs found in concatenated adata.\n"
+            f"Number of duplicated Ensembl IDs: {dup_counts.shape[0]}\n"
+            f"Top duplicates:\n{dup_counts.head(20).to_string()}"
+        )
+
+    return adata

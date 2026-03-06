@@ -1,10 +1,10 @@
 import os
 
-import anndata as ad
 import scanpy as sc
 from utils.scanpy_doublet_utils import calculate_doublet_threshold, run_scrublet
 from utils.scanpy_qc_utils import (
     compute_qc_metrics,
+    concatenate_adata,
     filter_low_count_cells,
     load_count_matrices,
     mad_filter,
@@ -64,16 +64,12 @@ def main() -> None:
     qc_plots(stages_dict, qc_dict, OUTPATH)
 
     # Merge filtered AnnData objects
-    adata = ad.concat(
-        adata_list_filtered,
-        label="sample_id",
-        keys=[a.obs["sample_id"].iloc[0] for a in adata_list_filtered],
-        join="outer",
-        merge="unique",
-    )
+    adata = concatenate_adata(adata_list_filtered)
 
+    # Store raw counts in layers before normalization
     adata.layers["counts"] = adata.X.copy()
 
+    # Normalize and log-transform the data
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata)
 
