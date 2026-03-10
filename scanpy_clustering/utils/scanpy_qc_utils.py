@@ -250,8 +250,14 @@ def concatenate_adata(adata_list) -> sc.AnnData:
     """
     # unify Ensembl ID column
     for adata in adata_list:
-        adata.var["ensembl_id"] = adata.var["gene_ids"].fillna(adata.var["gene_id"])
-
+        if "gene_ids" in adata.var.columns:
+            adata.var["ensembl_id"] = adata.var["gene_ids"]
+        elif "gene_id" in adata.var.columns:
+            adata.var["ensembl_id"] = adata.var["gene_id"]
+        else:
+            raise ValueError(
+                f"Neither 'gene_ids' nor 'gene_id' column found in adata.var for sample {adata.obs['sample_id'][0]}"
+            )
         # drop rows with no Ensembl ID
         keep = adata.var["ensembl_id"].notna()
         adata = adata[:, keep].copy()
@@ -268,7 +274,7 @@ def concatenate_adata(adata_list) -> sc.AnnData:
     )
 
     # raise error if duplicate ensembl IDs present after concatenation
-    duplicates = adata.var["ensembl_id"].duplicated(keep=False)
+    duplicates = adata.var_names.duplicated(keep=False)
     if duplicates.any():
         dup_ids = adata.var.loc[duplicates, "ensembl_id"]
         dup_counts = dup_ids.value_counts()
@@ -276,7 +282,7 @@ def concatenate_adata(adata_list) -> sc.AnnData:
         raise ValueError(
             "Duplicate Ensembl IDs found in concatenated adata.\n"
             f"Number of duplicated Ensembl IDs: {dup_counts.shape[0]}\n"
-            f"Top duplicates:\n{dup_counts.head(20).to_string()}"
+            f"Top duplicates:\n{dup_ids.head(20).to_string()}"
         )
 
     return adata
