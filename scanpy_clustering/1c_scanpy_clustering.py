@@ -1,8 +1,13 @@
 import os
 
-import anndata as an
+import anndata as ad
+import pandas as pd
 import scanpy as sc
 from utils.scanpy_clustering_utils import run_clustering
+
+# set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
+pd.options.mode.string_storage = "python"
+ad.settings.allow_write_nullable_strings = True
 
 # Load existing AnnData object
 SCANPY_OBJECT_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy"

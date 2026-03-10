@@ -1,5 +1,7 @@
 import os
 
+import anndata as ad
+import pandas as pd
 import scanpy as sc
 from utils.scanpy_doublet_utils import calculate_doublet_threshold, run_scrublet
 from utils.scanpy_qc_utils import (
@@ -11,6 +13,10 @@ from utils.scanpy_qc_utils import (
     obtain_qc_stats,
     qc_plots,
 )
+
+# set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
+pd.options.mode.string_storage = "python"
+ad.settings.allow_write_nullable_strings = True
 
 # Set paths
 MATRIX_DIR = "project-area/data/crohns_scrnaseq/10c_14n_analysis/crohns_samples"

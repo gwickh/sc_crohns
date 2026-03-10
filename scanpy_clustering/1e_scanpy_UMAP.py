@@ -1,6 +1,6 @@
 import os
 
-import anndata as an
+import anndata as ad
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -8,6 +8,10 @@ import scanpy as sc
 
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
+
+# set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
+pd.options.mode.string_storage = "python"
+ad.settings.allow_write_nullable_strings = True
 
 SCANPY_OBJECT_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy"
 
@@ -23,7 +27,7 @@ def plot_umaps_for_grid(
     res,
     UMAP_PATH,
     random_state=0,
-) -> an.AnnData:
+) -> ad.AnnData:
     had_umap = "X_umap" in adata.obsm
     umap_backup = adata.obsm["X_umap"].copy() if had_umap else None
 
