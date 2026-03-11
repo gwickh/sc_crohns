@@ -27,11 +27,6 @@ OUTPATH = os.path.join(
 
 os.makedirs(OUTPATH, exist_ok=True)
 
-# Check if adata_merged already exists, if true then end script
-if os.path.exists(os.path.join(OUTPATH, "adata_merged.h5ad")):
-    print("adata_merged already created, skipping")
-    exit()
-
 # Run preprocessing steps
 qc_dict = {
     "Number of genes": "n_genes_by_counts",
@@ -42,6 +37,13 @@ qc_dict = {
 
 
 def main() -> None:
+    # Check if adata_merged already exists, if true then end script
+    if os.path.exists(
+        os.path.join(os.path.dirname(OUTPATH), "adata_merged.h5ad")
+    ) and os.path.exists(os.path.join((OUTPATH), "qc_stats_mad_filtering.csv")):
+        print("adata_merged already created, skipping")
+        return
+
     # Load matrix paths and sample names
     adata_list = load_count_matrices(MATRIX_DIR)
 
@@ -71,6 +73,10 @@ def main() -> None:
 
     # Merge filtered AnnData objects
     adata = concatenate_adata(adata_list_filtered)
+
+    print(adata.var_names[:10])
+    print(adata.var.index[:10])
+    print(adata.var["ensembl_id"].head(10))
 
     # Store raw counts in layers before normalization
     adata.layers["counts"] = adata.X.copy()
