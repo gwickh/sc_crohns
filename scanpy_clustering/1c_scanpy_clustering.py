@@ -3,7 +3,7 @@ import os
 import anndata as ad
 import pandas as pd
 import scanpy as sc
-from utils.scanpy_clustering_utils import run_clustering
+from utils.scanpy_clustering_utils import run_clustering, run_clustering_analysis
 
 # set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
 pd.options.mode.string_storage = "python"
@@ -37,6 +37,15 @@ def main() -> None:
         neighbors=neighbors,
         res=res,
         CLUSTERING_OUTPUT_PATH=CLUSTERING_OUTPUT_PATH,
+    )
+
+    run_clustering_analysis(
+        adata,
+        CLUSTERING_OUTPUT_PATH,
+        disps,
+        n_features,
+        neighbors,
+        res,
     )
 
     adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_clustered.h5ad"))
