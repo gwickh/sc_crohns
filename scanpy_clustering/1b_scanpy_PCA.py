@@ -17,10 +17,6 @@ ad.settings.allow_write_nullable_strings = True
 
 SCANPY_OBJECT_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy"
 
-if os.path.exists(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_reduced.h5ad")):
-    print("adata_merged_reduced already created, skipping")
-    exit()
-
 # Create output directory
 PCA_OUTPUT_PATH = os.path.join(SCANPY_OBJECT_PATH, "PCA_stats")
 os.makedirs(PCA_OUTPUT_PATH) if not os.path.exists(PCA_OUTPUT_PATH) else None
@@ -141,8 +137,15 @@ top_n = 10
 
 
 def main() -> None:
+    if os.path.exists(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_reduced.h5ad")):
+        print("adata_merged_reduced already created, skipping")
+        exit()
+
     # Load existing AnnData object
+    print("Loading existing AnnData object...")
     adata = sc.read_h5ad(os.path.join(SCANPY_OBJECT_PATH, "adata_merged.h5ad"))
+
+    print("Running PCA with dispersion cutoffs and variable feature selection...")
     # Loop over dispersion cutoffs using mean.var.plot equivalent
     pca_dispersion(adata, PCA_OUTPUT_PATH, disps, xmin, xmax, s_genes, g2m_genes)
 
@@ -155,6 +158,7 @@ def main() -> None:
         g2m_genes,
     )
 
+    print("Saving reduced AnnData object...")
     adata.write(os.path.join(SCANPY_OBJECT_PATH, "adata_merged_reduced.h5ad"))
 
     # Plot elbow plots
@@ -165,3 +169,7 @@ def main() -> None:
 
     # Variable feature plots
     plot_variable_feature_plots(adata, PCA_OUTPUT_PATH)
+
+
+if __name__ == "__main__":
+    main()
