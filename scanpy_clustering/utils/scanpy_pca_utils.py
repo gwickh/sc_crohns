@@ -34,7 +34,7 @@ def run_pca(
         f.write("\n".join(features))
 
     sc.tl.score_genes_cell_cycle(hv_adata, s_genes=s_genes, g2m_genes=g2m_genes)
-    # sc.pp.regress_out(adata, ["S_score", "G2M_score"])    # scvi does not need regressing out of cell cycle scores
+    # sc.pp.regress_out(adata, ["S_score", "G2M_score"])    # commented out as scvi does not need regressing out of cell cycle scores
 
     sc.pp.scale(hv_adata, max_value=10)
 
