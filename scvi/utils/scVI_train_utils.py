@@ -44,7 +44,19 @@ def scvi_train(
     """
     Train scVI model on adata with specified hyperparameters and save model to SCVI_PATH.
     """
+    # add ensembl_id column to var, using gene_ids or gene_id column if available
+    if "gene_ids" in adata.var.columns:
+        adata.var["ensembl_id"] = adata.var["gene_ids"]
+    elif "gene_id" in adata.var.columns:
+        adata.var["ensembl_id"] = adata.var["gene_id"]
+    else:
+        raise ValueError(
+            f"Neither 'gene_ids' nor 'gene_id' column found in adata.var for sample {adata.obs['sample_id'].iloc[0]}"
+        )
 
+    keep = adata.var["ensembl_id"].notna()
+    adata = adata[:, keep].copy()
+    adata.var_names = adata.var["ensembl_id"].astype(str).values
     scvi.model.SCVI.setup_anndata(
         adata,
         batch_key="batch",
