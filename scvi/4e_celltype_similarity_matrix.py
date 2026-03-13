@@ -1,10 +1,11 @@
 import os
+
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import seaborn as sns
-from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.cluster.hierarchy import leaves_list, linkage
 from scipy.spatial.distance import squareform
 
 # vars
@@ -55,24 +56,30 @@ M_norm = M / den
 
 # save raw outputs
 pd.DataFrame(M, index=labels, columns=labels).to_csv(f"{OUT_PREFIX}.tsv", sep="\t")
-pd.DataFrame(M_norm, index=labels, columns=labels).to_csv(f"{OUT_PREFIX}_norm.tsv", sep="\t")
+pd.DataFrame(M_norm, index=labels, columns=labels).to_csv(
+    f"{OUT_PREFIX}_norm.tsv", sep="\t"
+)
 
 # hierarchical clustering (on M_norm)
-S = np.array(M_norm, dtype=float)   # Convert similarity (in [0,1]) to distance
-np.fill_diagonal(S, 1.0)            # Ensure diagonals are 1 for a proper similarity
+S = np.array(M_norm, dtype=float)  # Convert similarity (in [0,1]) to distance
+np.fill_diagonal(S, 1.0)  # Ensure diagonals are 1 for a proper similarity
 S = np.clip(S, 0.0, 1.0)
 
 D = 1.0 - S  # distance in [0,1], symmetric, 0 on diagonal
 
 # Condensed distance vector for linkage
 # (squareform reads upper triangle by default; checks=False for speed since we know it's valid)
-Z = linkage(squareform(D, checks=False), method="average")  # UPGMA; try 'complete' if you prefer tighter clusters
+Z = linkage(
+    squareform(D, checks=False), method="average"
+)  # UPGMA; try 'complete' if you prefer tighter clusters
 order = leaves_list(Z)
 
 # Reorder labels and matrices
 labels_ord = [labels[i] for i in order]
 M_df = pd.DataFrame(M, index=labels, columns=labels).loc[labels_ord, labels_ord]
-Mnorm_df = pd.DataFrame(M_norm, index=labels, columns=labels).loc[labels_ord, labels_ord]
+Mnorm_df = pd.DataFrame(M_norm, index=labels, columns=labels).loc[
+    labels_ord, labels_ord
+]
 labels = labels_ord  # reuse downstream
 n = len(labels)
 
@@ -80,7 +87,9 @@ n = len(labels)
 mask_upper = np.triu(np.ones((n, n), dtype=bool), k=1)
 
 # Log norm for M
-vmin_M = max(M_df.values[M_df.values > 0].min(), 1e-6) if (M_df.values > 0).any() else 1e-6
+vmin_M = (
+    max(M_df.values[M_df.values > 0].min(), 1e-6) if (M_df.values > 0).any() else 1e-6
+)
 vmax_M = M_df.values.max()
 norm_M = mcolors.LogNorm(vmin=vmin_M, vmax=vmax_M)
 
@@ -91,20 +100,30 @@ norm_Mn = mcolors.PowerNorm(gamma=0.1, vmin=0, vmax=vmax_Mn)
 fig, axes = plt.subplots(1, 2, figsize=(24, 9))
 
 sns.heatmap(
-    M_df, ax=axes[0], cmap="magma",
-    norm=norm_M, mask=mask_upper, square=True,
-    xticklabels=labels, yticklabels=labels,
-    cbar_kws={"label": "Fuzzy overlap (M)"}
+    M_df,
+    ax=axes[0],
+    cmap="magma",
+    norm=norm_M,
+    mask=mask_upper,
+    square=True,
+    xticklabels=labels,
+    yticklabels=labels,
+    cbar_kws={"label": "Fuzzy overlap (M)"},
 )
 axes[0].set_title("Fuzzy overlap of cell types (clustered)")
 axes[0].tick_params(axis="x", labelrotation=90, labelsize=8)
 axes[0].tick_params(axis="y", labelsize=8)
 
 sns.heatmap(
-    Mnorm_df, ax=axes[1], cmap="viridis",
-    norm=norm_Mn, mask=mask_upper, square=True,
-    xticklabels=labels, yticklabels=labels,
-    cbar_kws={"label": "Normalized similarity (Ochiai, γ=0.1)"}
+    Mnorm_df,
+    ax=axes[1],
+    cmap="viridis",
+    norm=norm_Mn,
+    mask=mask_upper,
+    square=True,
+    xticklabels=labels,
+    yticklabels=labels,
+    cbar_kws={"label": "Normalized similarity (Ochiai, γ=0.1)"},
 )
 axes[1].set_title("Normalized Ochiai similarity (clustered)")
 axes[1].tick_params(axis="x", labelrotation=90, labelsize=8)
