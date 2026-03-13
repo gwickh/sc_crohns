@@ -76,15 +76,15 @@ def main() -> None:
 
     adata_full = adata.copy()
 
-    # Run hyperparameter search
-    scvi_hyperparameter_search(
-        adata,
-        LOG_PATH,
-        search_space,
-        scheduler_kwargs,
-    )
+    # # Run hyperparameter search
+    # scvi_hyperparameter_search(
+    #     adata,
+    #     LOG_PATH,
+    #     search_space,
+    #     scheduler_kwargs,
+    # )
 
-    plot_learning_curves(LOG_PATH, SCVI_PATH)
+    # plot_learning_curves(LOG_PATH, SCVI_PATH)
 
     # Train a final model with the best hyperparameters and get embeddings for downstream analysis
     model = scvi_train(

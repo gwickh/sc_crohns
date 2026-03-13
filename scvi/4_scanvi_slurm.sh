@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # SLURM directives
-#SBATCH --job-name=scanvi_cluster
-#SBATCH --output=4_scanvi_%j.SLURM.stdout
-#SBATCH --error=4_scanvi_%j.SLURM.stderr
+#SBATCH --job-name=scvi_cluster
+#SBATCH --output=4_scvi_%j.SLURM.stdout
+#SBATCH --error=4_scvi_%j.SLURM.stderr
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
@@ -22,12 +22,11 @@ mkdir -p "${OUT_DIR}"
 source ~/.bashrc
 conda activate python_scripts
 scripts=(
-    # "4a_generate_latent_space.py"
-    # "4b_label_transfer.py"
-    # "4d_scanpy_clustering.py"
+    "4a_generate_latent_space.py"
+    "4b_label_transfer.py"
+    "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
-    gene_set_intersection.py
 )
 
 for script in "${scripts[@]}"; do
