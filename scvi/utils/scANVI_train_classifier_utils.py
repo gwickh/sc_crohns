@@ -17,6 +17,21 @@ os.makedirs(SCVI_PATH, exist_ok=True)
 # train model on reference object
 def train_scanvi_ref(SCVI_PATH: str, label: str = "Integrated_05") -> None:
     adata_ref = sc.read_h5ad(os.path.join(SCVI_PATH, "gca_ref_scvi.h5ad"))
+
+    # add ensembl_id column to var, using gene_ids or gene_id column if available
+    if "gene_ids" in adata_ref.var.columns:
+        adata_ref.var["ensembl_id"] = adata_ref.var["gene_ids"]
+    elif "gene_id" in adata_ref.var.columns:
+        adata_ref.var["ensembl_id"] = adata_ref.var["gene_id"]
+    else:
+        raise ValueError(
+            f"Neither 'gene_ids' nor 'gene_id' column found in adata_ref.var for sample {adata_ref.obs['sample_id'].iloc[0]}"
+        )
+
+    keep = adata_ref.var["ensembl_id"].notna()
+    adata_ref = adata_ref[:, keep].copy()
+    adata_ref.var_names = adata_ref.var["ensembl_id"].astype(str).values
+
     vae_ref = scvi.model.SCVI.load(
         os.path.join(SCVI_PATH, "scvi_model"), adata=adata_ref
     )
