@@ -14,6 +14,7 @@ from utils.scVI_train_utils import (
     scvi_get_embeddings_and_normalized_expression,
     scvi_train,
 )
+from utils.sysVI_train_utils import train_sysvi
 
 # set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
 pd.options.mode.string_storage = "python"
@@ -86,22 +87,27 @@ def main() -> None:
 
     # plot_learning_curves(LOG_PATH, SCVI_PATH)
 
-    # Train a final model with the best hyperparameters and get embeddings for downstream analysis
-    model = scvi_train(
-        adata=adata,
-        SCVI_PATH=SCVI_PATH,
-        n_hidden=128,
-        n_latent=20,
-        n_layers=3,
-        dropout_rate=0.05,
-        max_epochs=100,
-        lr=1e-3,
-        weight_decay=5.441928187220108e-07,
-        eps=1e-2,
-    )
+    # # Train a final model with the best hyperparameters and get embeddings for downstream analysis
+    # model = scvi_train(
+    #     adata=adata,
+    #     SCVI_PATH=SCVI_PATH,
+    #     n_hidden=128,
+    #     n_latent=20,
+    #     n_layers=3,
+    #     dropout_rate=0.05,
+    #     max_epochs=100,
+    #     lr=1e-3,
+    #     weight_decay=5.441928187220108e-07,
+    #     eps=1e-2,
+    # )
 
-    scvi_get_embeddings_and_normalized_expression(
-        adata=adata_full, model=model, SCVI_PATH=SCVI_PATH
+    # scvi_get_embeddings_and_normalized_expression(
+    #     adata=adata_full, model=model, SCVI_PATH=SCVI_PATH
+    # )
+
+    train_sysvi(
+        "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
+        SCVI_PATH,
     )
 
 
