@@ -57,6 +57,7 @@ def scvi_train(
     keep = adata.var["ensembl_id"].notna()
     adata = adata[:, keep].copy()
     adata.var_names = adata.var["ensembl_id"].astype(str).values
+
     scvi.model.SCVI.setup_anndata(
         adata,
         batch_key="batch",
