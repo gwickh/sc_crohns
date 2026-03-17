@@ -1,12 +1,15 @@
 import os
 
 import matplotlib.pyplot as plt
+import scanpy as sc
 from scvi.external import SysVI
 
 import scvi
 
 
-def train_sysvi(adata, output_path) -> None:
+def train_sysvi(adata_path, output_path) -> None:
+    adata = sc.read_h5ad(adata_path)
+
     # add ensembl_id column to var, using gene_ids or gene_id column if available
     if "gene_ids" in adata.var.columns:
         adata.var["ensembl_id"] = adata.var["gene_ids"]
