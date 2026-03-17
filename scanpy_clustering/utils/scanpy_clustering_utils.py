@@ -383,3 +383,8 @@ def run_clustering_analysis(
                 clustering_output = pd.concat(
                     [clustering_output, summary_df], ignore_index=True
                 )
+
+    clustering_output.to_csv(
+        os.path.join(CLUSTERING_OUTPUT_PATH, "clustering_summary.csv"),
+        index=False,
+    )
