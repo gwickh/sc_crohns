@@ -7,3 +7,4 @@
 *.pyc
 .vscode
 *.Rproj
+settings.json
