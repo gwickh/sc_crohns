@@ -1,19 +1,23 @@
+#!/usr/bin/env python3
+"""Compute intersection of gene sets between 10X Chromium and Parse samples."""
+
 import numpy as np
 import scanpy as sc
 
-ADATA_OBJ_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_merged_clustered.h5ad"
+ADATA_OBJ_PATH = (
+    "project-area/data/crohns_scrnaseq/10c_14n_analysis/,"
+    "scanpy/adata_merged_clustered.h5ad"
+)
 
 
-def main():
+def main() -> None:
+    """Compute gene set intersection."""
     adata = sc.read_h5ad(ADATA_OBJ_PATH)
-
-    print(adata.var[["gene_ids", "gene_id", "feature_types"]].isna().sum())
-    print(adata.var[["gene_ids", "gene_id", "feature_types"]].head(20))
-    print(adata.var[["gene_ids", "gene_id", "feature_types"]].tail(20))
 
     adata_chromium = adata[adata.obs["platform"] == "10X_Chromium"]
     adata_chromium = adata_chromium[
-        :, np.asarray(adata_chromium.X.sum(axis=0)).ravel() > 0
+        :,
+        np.asarray(adata_chromium.X.sum(axis=0)).ravel() > 0,
     ].copy()
     chromium_gene_set = set(adata_chromium.var["gene_id"])
 
@@ -24,7 +28,10 @@ def main():
     print(f"Parse gene set size: {len(parse_gene_set)}")
     print(f"Chromium gene set size: {len(chromium_gene_set)}")
     print(
-        f"Intersection gene set size: {len(parse_gene_set.intersection(chromium_gene_set))}"
+        (
+            "Intersection gene set size:",
+            f"{len(parse_gene_set.intersection(chromium_gene_set))}",
+        ),
     )
 
 

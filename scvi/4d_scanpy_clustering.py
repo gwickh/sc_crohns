@@ -145,8 +145,9 @@ adata.obsm["X_umap_normal"][normal_mask, :] = adata_n.obsm["X_umap_normal"].asty
     np.float32
 )
 
-assert "sample_id" in adata.obs
-assert LABEL in adata.obs
+if "sample_id" or LABEL not in adata.obs:
+    raise KeyError(f"Missing required obs columns: 'sample_id' and '{LABEL}'")
+
 
 df = adata.obs[["sample_id", LABEL]].copy()
 

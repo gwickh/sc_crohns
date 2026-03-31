@@ -1,44 +1,69 @@
-import os
+#!/usr/bin/env python3
+"""Utility functions for training of sysVI."""
+
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import scanpy as sc
 from scvi.external import SysVI
 
-import scvi
+
+class MissingAnnDataMetadataError(ValueError):
+    """Raised when a required column is missing from an AnnData object."""
+
+    def __init__(self, column_name: str, sample_id: str, table: str = "obs"):
+        """
+        Initialize the error.
+
+        Args:
+            column_name: The name of the missing column (or description).
+            sample_id: The ID of the sample being processed.
+            table: The AnnData attribute where it's missing ('obs', 'var', etc.).
+
+        """
+        self.column_name = column_name
+        self.sample_id = sample_id
+        self.table = table
+
+        # Construct the message inside the class to keep the call-site clean
+        self.message = (
+            f"Required metadata '{self.column_name}' not found in adata.{self.table} "
+            f"for sample: {self.sample_id}"
+        )
+        super().__init__(self.message)
 
 
-def train_sysvi(adata_path, output_path) -> None:
+def train_sysvi(adata_path: Path, output_path: Path) -> None:
+    """Train sysVI on the given adata and save the losses plot."""
     adata = sc.read_h5ad(adata_path)
 
+    col = "gene_id/gene_ids"
     # add ensembl_id column to var, using gene_ids or gene_id column if available
+    sample_id = adata.obs["sample_id"].iloc[0]
     if "gene_ids" in adata.var.columns:
         adata.var["ensembl_id"] = adata.var["gene_ids"]
     elif "gene_id" in adata.var.columns:
         adata.var["ensembl_id"] = adata.var["gene_id"]
     else:
-        raise ValueError(
-            f"Neither 'gene_ids' nor 'gene_id' column found in adata.var for sample {adata.obs['sample_id'].iloc[0]}"
-        )
+        sample_id = adata.obs["sample_id"].iloc[0]
+        raise MissingAnnDataMetadataError(col, sample_id, table="var")
 
-    if "platform" not in adata.obs.columns:
-        raise ValueError(
-            f"'platform' column not found in adata.obs for sample {adata.obs['sample_id'].iloc[0]}"
-        )
+    platform = "platform"
+    if platform not in adata.obs.columns:
+        raise MissingAnnDataMetadataError(platform, sample_id, table="obs")
 
     keep = adata.var["ensembl_id"].notna()
     adata = adata[:, keep].copy()
     adata.var_names = adata.var["ensembl_id"].astype(str).values
 
-    SysVI.model.SCVI.setup_anndata(
+    SysVI.setup_anndata(
         adata,
         batch_key="platform",
         continuous_covariate_keys=["pct_counts_mt"],
-        categorical_covariate_keys=["batch"],
     )
 
     model = SysVI(
         adata=adata,
-        embed_categorical_covariates=True,
     )
 
     model.train(
@@ -47,8 +72,13 @@ def train_sysvi(adata_path, output_path) -> None:
         check_val_every_n_epoch=1,
     )
 
-    epochs_detail_plot = 100
+    model.save(output_path / "scvi_model", overwrite=True)
 
+    return model
+
+
+def plot_learning_curves(output_path: Path, model, epochs_detail_plot=100) -> None:
+    """Plot learning curves from the training logs."""
     # Losses to plot
     losses = [
         "reconstruction_loss_train",
@@ -71,8 +101,11 @@ def train_sysvi(adata_path, output_path) -> None:
             axs[0, ax_i].plot(l_values.index, l_values.values.ravel(), c=c, alpha=alpha)
             axs[0, ax_i].set_title(l_name)
             axs[1, ax_i].plot(
-                l_values.index[dp:], l_values.values.ravel()[dp:], c=c, alpha=alpha
+                l_values.index[dp:],
+                l_values.values.ravel()[dp:],
+                c=c,
+                alpha=alpha,
             )
 
     fig.tight_layout()
-    fig.savefig(os.path.join(output_path, "sysvi_losses.png"), dpi=200)
+    fig.savefig(Path(output_path) / "sysvi_losses.png", dpi=200)

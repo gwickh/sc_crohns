@@ -1,4 +1,6 @@
-import os
+#!/usr/bin/env python3
+"""Train latent space model on reference data and project query data."""
+
 from pathlib import Path
 
 import anndata as ad
@@ -16,22 +18,24 @@ from utils.scVI_train_utils import (
 )
 from utils.sysVI_train_utils import train_sysvi
 
-# set pandas string handling to use builtin str type, not pyarrow to avoid anndata IO issues
+import scvi
+
+# set pandas string handling to use builtin str type, not pyarrow to avoid IO issues
 pd.options.mode.string_storage = "python"
 ad.settings.allow_write_nullable_strings = True
 
 
 # Define paths
-SCVI_PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output"
-os.makedirs(SCVI_PATH, exist_ok=True)
+SCVI_PATH = Path("project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output")
+SCVI_PATH.mkdir(parents=True, exist_ok=True)
 
 LOG_PATH = Path(
-    "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/scvi_autotune_log"
+    "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/scvi_autotune_log",
 ).resolve()
 LOG_PATH.mkdir(parents=True, exist_ok=True)
 
-GCA_OBJ_PATH = os.path.join(SCVI_PATH, "Full_obj_raw_counts_nosoupx_v2.h5ad")
-REF_OBJ_PATH = os.path.join(SCVI_PATH, "obj_healthy_adult_pediatric_TIL.h5ad")
+GCA_OBJ_PATH = SCVI_PATH / "Full_obj_raw_counts_nosoupx_v2.h5ad"
+REF_OBJ_PATH = SCVI_PATH / "obj_healthy_adult_pediatric_TIL.h5ad"
 
 # define hyperparameters
 search_space = {
@@ -64,50 +68,58 @@ scheduler_kwargs = {
 }
 
 
+def generate_latent_space(adata, method) -> scvi.model.SCVI:
+    """Train latent space model on reference data and project query data."""
+    if method.lower() == "scvi":
+        print("Training scVI model...")
+        # Run hyperparameter search
+        scvi_hyperparameter_search(
+            adata,
+            LOG_PATH,
+            search_space,
+            scheduler_kwargs,
+        )
+
+        plot_learning_curves(LOG_PATH, SCVI_PATH)
+
+        # Train a final model with the best hyperparameters and get embeddings
+        model = scvi_train(adata=adata)
+
+    elif method.lower() == "sysvi":
+        print("Training SysVI model...")
+        model = train_sysvi(
+            "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
+            SCVI_PATH,
+        )
+
+    else:
+        raise NotImplementedError
+
+    return model
+
+
 def main() -> None:
+    """Run scVI training and get embeddings."""
     adata = load_ref_obj(GCA_OBJ_PATH, REF_OBJ_PATH)
+    adata = sc.read_h5ad(
+        "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
+    )
 
     sc.pp.highly_variable_genes(
         adata,
         flavor="seurat_v3",
         n_top_genes=5000,
-        batch_key="batch",
+        batch_key="platform",
         subset=True,
     )
 
+    model = generate_latent_space(adata=adata, method="sysvi")
+
     adata_full = adata.copy()
 
-    # # Run hyperparameter search
-    # scvi_hyperparameter_search(
-    #     adata,
-    #     LOG_PATH,
-    #     search_space,
-    #     scheduler_kwargs,
-    # )
-
-    # plot_learning_curves(LOG_PATH, SCVI_PATH)
-
-    # # Train a final model with the best hyperparameters and get embeddings for downstream analysis
-    # model = scvi_train(
-    #     adata=adata,
-    #     SCVI_PATH=SCVI_PATH,
-    #     n_hidden=128,
-    #     n_latent=20,
-    #     n_layers=3,
-    #     dropout_rate=0.05,
-    #     max_epochs=100,
-    #     lr=1e-3,
-    #     weight_decay=5.441928187220108e-07,
-    #     eps=1e-2,
-    # )
-
-    # scvi_get_embeddings_and_normalized_expression(
-    #     adata=adata_full, model=model, SCVI_PATH=SCVI_PATH
-    # )
-
-    train_sysvi(
-        "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
-        SCVI_PATH,
+    scvi_get_embeddings_and_normalized_expression(
+        adata=adata_full,
+        model=model,
     )
 
 

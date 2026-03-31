@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+"""Utils for scVI hyperparameter search and learning curve plotting."""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -10,13 +13,11 @@ from scvi import autotune
 
 def scvi_hyperparameter_search(
     adata: sc.AnnData,
-    LOG_PATH: Path,
+    log_path: Path,
     search_space: dict,
     scheduler_kwargs: dict,
 ):
-    """
-    Perform hyperparameter search for scVI model on adata and log results to LOG_PATH.
-    """
+    """Perform hyperparameter search for scVI model on adata and log results."""
     # setup scvi model class
     model_cls = scvi.model.SCVI
     model_cls.setup_anndata(
@@ -35,18 +36,18 @@ def scvi_hyperparameter_search(
         scheduler="asha",
         scheduler_kwargs=scheduler_kwargs,
         num_samples=50,
-        logging_dir=str(LOG_PATH),
+        logging_dir=str(log_path),
     )
     print(results)
 
 
 def plot_learning_curves(
-    LOG_PATH: Path,
-    SCVI_PATH: Path,
+    log_path: Path,
+    scvi_path: Path,
     top_n: int = 10,
 ) -> None:
-    """Plot learning curves for top hyperparameter search trials from LOG_PATH."""
-    base = Path(LOG_PATH).resolve()
+    """Plot learning curves for top hyperparameter search trials from log_path."""
+    base = Path(log_path).resolve()
     exp_dir = max(
         [p for p in base.iterdir() if p.is_dir() and p.name.startswith("scvi_")],
         key=lambda p: p.stat().st_mtime,
@@ -80,7 +81,8 @@ def plot_learning_curves(
 
     # rank trials by final validation loss
     ranked = sorted(
-        [(tid, df) for tid, df in trial_dfs.items()], key=lambda x: final_val_loss(x[1])
+        [(tid, df) for tid, df in trial_dfs.items()],
+        key=lambda x: final_val_loss(x[1]),
     )
 
     top_n = 10
@@ -99,6 +101,6 @@ def plot_learning_curves(
     plt.title(f"Top {top_n} learning curves (validation_loss)")
     plt.legend(fontsize=6, loc="best")
     plt.tight_layout()
-    out = SCVI_PATH / f"learning_curves_top{top_n}.png"
+    out = scvi_path / f"learning_curves_top{top_n}.png"
     plt.savefig(out, dpi=200)
     plt.close()
