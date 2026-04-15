@@ -87,10 +87,7 @@ def generate_latent_space(adata, method) -> scvi.model.SCVI:
 
     elif method.lower() == "sysvi":
         print("Training SysVI model...")
-        model = train_sysvi(
-            "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
-            SCVI_PATH,
-        )
+        model = train_sysvi(adata, SCVI_PATH)
 
     else:
         raise NotImplementedError
@@ -120,6 +117,8 @@ def main() -> None:
     scvi_get_embeddings_and_normalized_expression(
         adata=adata_full,
         model=model,
+        scvi_path=SCVI_PATH,
+        outfile="gca_ref_sysvi.h5ad",
     )
 
 

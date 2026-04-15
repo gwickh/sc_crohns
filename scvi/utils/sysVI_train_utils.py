@@ -33,10 +33,8 @@ class MissingAnnDataMetadataError(ValueError):
         super().__init__(self.message)
 
 
-def train_sysvi(adata_path: Path, output_path: Path) -> None:
+def train_sysvi(adata: sc.AnnData, output_path: Path) -> None:
     """Train sysVI on the given adata and save the losses plot."""
-    adata = sc.read_h5ad(adata_path)
-
     col = "gene_id/gene_ids"
     # add ensembl_id column to var, using gene_ids or gene_id column if available
     sample_id = adata.obs["sample_id"].iloc[0]
@@ -68,7 +66,7 @@ def train_sysvi(adata_path: Path, output_path: Path) -> None:
 
     model.train(
         plan_kwargs={"kl_weight": 1, "z_distance_cycle_weight": 5},
-        max_epochs=200,
+        max_epochs=100,
         check_val_every_n_epoch=1,
     )
 
