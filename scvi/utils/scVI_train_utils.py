@@ -120,8 +120,9 @@ def scvi_get_embeddings_and_normalized_expression(
     adata: sc.AnnData,
     model: scvi.model.SCVI,
     scvi_path: Path,
+    outfile: str,
 ) -> sc.AnnData:
     """Add scVI latent embeddings to adata."""
     adata.obsm["X_embeddings"] = model.get_latent_representation(adata=adata)
-    adata.write_h5ad(scvi_path / "gca_ref_scvi.h5ad")
+    adata.write_h5ad(scvi_path / outfile)
     return adata
