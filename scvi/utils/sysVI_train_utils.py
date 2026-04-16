@@ -35,25 +35,6 @@ class MissingAnnDataMetadataError(ValueError):
 
 def train_sysvi(adata: sc.AnnData, output_path: Path) -> None:
     """Train sysVI on the given adata and save the losses plot."""
-    col = "gene_id/gene_ids"
-    # add ensembl_id column to var, using gene_ids or gene_id column if available
-    sample_id = adata.obs["sample_id"].iloc[0]
-    if "gene_ids" in adata.var.columns:
-        adata.var["ensembl_id"] = adata.var["gene_ids"]
-    elif "gene_id" in adata.var.columns:
-        adata.var["ensembl_id"] = adata.var["gene_id"]
-    else:
-        sample_id = adata.obs["sample_id"].iloc[0]
-        raise MissingAnnDataMetadataError(col, sample_id, table="var")
-
-    platform = "platform"
-    if platform not in adata.obs.columns:
-        raise MissingAnnDataMetadataError(platform, sample_id, table="obs")
-
-    keep = adata.var["ensembl_id"].notna()
-    adata = adata[:, keep].copy()
-    adata.var_names = adata.var["ensembl_id"].astype(str).values
-
     SysVI.setup_anndata(
         adata,
         batch_key="platform",
@@ -66,11 +47,11 @@ def train_sysvi(adata: sc.AnnData, output_path: Path) -> None:
 
     model.train(
         plan_kwargs={"kl_weight": 1, "z_distance_cycle_weight": 5},
-        max_epochs=100,
+        max_epochs=200,
         check_val_every_n_epoch=1,
     )
 
-    model.save(output_path / "scvi_model", overwrite=True)
+    model.save(output_path / "sysvi_model", overwrite=True)
 
     return model
 

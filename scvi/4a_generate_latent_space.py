@@ -16,7 +16,7 @@ from utils.scVI_train_utils import (
     scvi_get_embeddings_and_normalized_expression,
     scvi_train,
 )
-from utils.sysVI_train_utils import train_sysvi
+from utils.sysVI_train_utils import MissingAnnDataMetadataError, train_sysvi
 
 import scvi
 
@@ -95,12 +95,37 @@ def generate_latent_space(adata, method) -> scvi.model.SCVI:
     return model
 
 
+def check_adata(adata: sc.AnnData) -> None:
+    """Check that the adata object has the required columns."""
+    col = "gene_id/gene_ids"
+    # add ensembl_id column to var, using gene_ids or gene_id column if available
+    sample_id = adata.obs["sample_id"].iloc[0]
+    if "gene_ids" in adata.var.columns:
+        adata.var["ensembl_id"] = adata.var["gene_ids"]
+    elif "gene_id" in adata.var.columns:
+        adata.var["ensembl_id"] = adata.var["gene_id"]
+    else:
+        sample_id = adata.obs["sample_id"].iloc[0]
+        raise MissingAnnDataMetadataError(col, sample_id, table="var")
+
+    platform = "platform"
+    if platform not in adata.obs.columns:
+        raise MissingAnnDataMetadataError(platform, sample_id, table="obs")
+
+    keep = adata.var["ensembl_id"].notna()
+    adata = adata[:, keep].copy()
+    adata.var_names = adata.var["ensembl_id"].astype(str).to_numpy()
+
+    return adata
+
+
 def main() -> None:
     """Run scVI training and get embeddings."""
     adata = load_ref_obj(GCA_OBJ_PATH, REF_OBJ_PATH)
     adata = sc.read_h5ad(
         "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
     )
+    adata = check_adata(adata)
 
     sc.pp.highly_variable_genes(
         adata,
