@@ -7,13 +7,12 @@ from matplotlib import pyplot as plt
 from matplotlib import ticker as mtick
 
 PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output"
-LABEL = "Integrated_05"
-ADATA_IN = os.path.join(PATH, "query_concat.h5ad")
-ADATA_OUT = os.path.join(PATH, "query_concat_umaps.h5ad")
+ADATA_IN = os.path.join(PATH, "gca_ref_sysvi.h5ad")
+ADATA_OUT = os.path.join(PATH, "sysvi_concat_umaps.h5ad")
 
 adata = sc.read_h5ad(ADATA_IN)
 
-REDUCT_KEY = f"X_embeddings_{LABEL}"
+REDUCT_KEY = "X_embeddings"
 
 sid = adata.obs["sample_id"].astype(str)
 
@@ -25,7 +24,7 @@ N_NEIGHBORS = 15
 
 
 if REDUCT_KEY not in adata.obsm:
-    alt = f"X_embeddings{LABEL}"
+    alt = "X_embeddings"
     if alt in adata.obsm:
         REDUCT_KEY = alt
     else:
@@ -67,12 +66,12 @@ adata = compute_umap(
     umap_key="X_umap_full",
 )
 
-save_umap_pdf(
-    adata,
-    umap_key="X_umap_full",
-    color=LABEL,
-    out_pdf=os.path.join(PATH, f"UMAP_{REDUCT_KEY}_celltypes.pdf"),
-)
+# save_umap_pdf(
+#     adata,
+#     umap_key="X_umap_full",
+#     color=LABEL,
+#     out_pdf=os.path.join(PATH, f"UMAP_{REDUCT_KEY}_celltypes.pdf"),
+# )
 
 save_umap_pdf(
     adata,
@@ -96,12 +95,12 @@ adata_c = compute_umap(
     umap_key="X_umap_crohns",
 )
 
-save_umap_pdf(
-    adata_c,
-    umap_key="X_umap_crohns",
-    color=LABEL,
-    out_pdf=os.path.join(PATH, f"UMAP_Crohns_{REDUCT_KEY}_celltypes.pdf"),
-)
+# save_umap_pdf(
+#     adata_c,
+#     umap_key="X_umap_crohns",
+#     color=LABEL,
+#     out_pdf=os.path.join(PATH, f"UMAP_Crohns_{REDUCT_KEY}_celltypes.pdf"),
+# )
 
 save_umap_pdf(
     adata_c,
@@ -118,12 +117,12 @@ adata_n = compute_umap(
     umap_key="X_umap_normal",
 )
 
-save_umap_pdf(
-    adata_n,
-    umap_key="X_umap_normal",
-    color=LABEL,
-    out_pdf=os.path.join(PATH, f"UMAP_Normal_{REDUCT_KEY}_celltypes.pdf"),
-)
+# save_umap_pdf(
+#     adata_n,
+#     umap_key="X_umap_normal",
+#     color=LABEL,
+#     out_pdf=os.path.join(PATH, f"UMAP_Normal_{REDUCT_KEY}_celltypes.pdf"),
+# )
 
 save_umap_pdf(
     adata_n,
@@ -145,14 +144,14 @@ adata.obsm["X_umap_normal"][normal_mask, :] = adata_n.obsm["X_umap_normal"].asty
     np.float32
 )
 
-if "sample_id" or LABEL not in adata.obs:
-    raise KeyError(f"Missing required obs columns: 'sample_id' and '{LABEL}'")
+# if "sample_id" or LABEL not in adata.obs:
+#     raise KeyError(f"Missing required obs columns: 'sample_id' and '{LABEL}'")
 
 
-df = adata.obs[["sample_id", LABEL]].copy()
+df = adata.obs[["sample_id"]].copy()
 
 prop = (
-    df.groupby(["sample_id", LABEL], observed=True)
+    df.groupby(["sample_id"], observed=True)
     .size()
     .groupby(level=0, observed=True)
     .apply(lambda s: s / s.sum())
@@ -227,7 +226,6 @@ fig.legend(
     loc="center left",
     frameon=False,
     ncol=ncol,
-    title=LABEL,
 )
 
 fig.tight_layout()

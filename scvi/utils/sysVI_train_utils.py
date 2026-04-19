@@ -3,7 +3,8 @@
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import scanpy as sc
 from scvi.external import SysVI
 
@@ -33,8 +34,45 @@ class MissingAnnDataMetadataError(ValueError):
         super().__init__(self.message)
 
 
-def train_sysvi(adata: sc.AnnData, output_path: Path) -> None:
-    """Train sysVI on the given adata and save the losses plot."""
+def sample_sysvi_init() -> dict:
+    """Sample a single random sysVI hyperparameter initialisation."""
+    rng = np.random.default_rng()
+
+    return {
+        # architecture
+        "n_latent": int(rng.choice([10, 15, 20, 30, 40])),
+        "n_prior_components": int(rng.choice([5, 10, 20, 30, 40])),
+        "dropout_rate": float(rng.uniform(0.0, 0.2)),
+        "n_hidden": int(rng.choice([64, 128, 256])),
+        "n_layers": int(rng.choice([1, 2, 3])),
+        # training / optimizer
+        "lr": float(np.exp(rng.uniform(np.log(1e-4), np.log(3e-3)))),
+        "weight_decay": float(np.exp(rng.uniform(np.log(1e-8), np.log(1e-4)))),
+        "eps": float(np.exp(rng.uniform(np.log(1e-8), np.log(1e-4)))),
+        "kl_weight": float(rng.uniform(0.1, 1.0)),
+        "z_distance_cycle_weight": float(rng.uniform(0.0, 5.0)),
+    }
+
+
+def train_sysvi(
+    adata: sc.AnnData,
+    output_path: Path,
+    run_id: str,
+    *,
+    n_latent: int,
+    n_hidden: int,
+    n_layers: int,
+    n_prior_components: int,
+    dropout_rate: float,
+    lr: float,
+    weight_decay: float,
+    eps: float,
+    kl_weight: float,
+    z_distance_cycle_weight: float,
+    max_epochs: int = 100,
+    batch_size: int = 256,
+):
+    """Train sysVI on the given AnnData and save the model."""
     SysVI.setup_anndata(
         adata,
         batch_key="platform",
@@ -43,48 +81,54 @@ def train_sysvi(adata: sc.AnnData, output_path: Path) -> None:
 
     model = SysVI(
         adata=adata,
+        n_latent=n_latent,
+        n_prior_components=n_prior_components,
+        dropout_rate=dropout_rate,
+        n_hidden=n_hidden,
+        n_layers=n_layers,
     )
 
     model.train(
-        plan_kwargs={"kl_weight": 1, "z_distance_cycle_weight": 5},
-        max_epochs=200,
+        max_epochs=max_epochs,
+        batch_size=batch_size,
+        early_stopping=True,
+        early_stopping_monitor="elbo_validation",
+        early_stopping_patience=20,
         check_val_every_n_epoch=1,
+        plan_kwargs={
+            "lr": lr,
+            "weight_decay": weight_decay,
+            "eps": eps,
+            "kl_weight": kl_weight,
+            "z_distance_cycle_weight": z_distance_cycle_weight,
+        },
     )
 
-    model.save(output_path / "sysvi_model", overwrite=True)
+    model.save(output_path / f"{run_id}_sysvi_model", overwrite=True)
+
+    params = {
+        "run_id": run_id,
+        "n_latent": n_latent,
+        "n_prior_components": n_prior_components,
+        "dropout_rate": dropout_rate,
+        "lr": lr,
+        "weight_decay": weight_decay,
+        "eps": eps,
+        "kl_weight": kl_weight,
+        "z_distance_cycle_weight": z_distance_cycle_weight,
+        "max_epochs": max_epochs,
+        "batch_size": batch_size,
+    }
+
+    pd.DataFrame([params]).to_csv(
+        output_path / f"{run_id}_sysvi_params.csv",
+        index=False,
+    )
+
+    history_df = pd.DataFrame({k: v.squeeze() for k, v in model.history.items()})
+    history_df.to_csv(
+        output_path / f"{run_id}_sysvi_losses.csv",
+        index=True,
+    )
 
     return model
-
-
-def plot_learning_curves(output_path: Path, model, epochs_detail_plot=100) -> None:
-    """Plot learning curves from the training logs."""
-    # Losses to plot
-    losses = [
-        "reconstruction_loss_train",
-        "kl_local_train",
-        "cycle_loss_train",
-    ]
-    fig, axs = plt.subplots(2, len(losses), figsize=(len(losses) * 3, 4))
-    for ax_i, l_train in enumerate(losses):
-        l_val = l_train.replace("_train", "_validation")
-        l_name = l_train.replace("_train", "")
-        # Change idx of epochs to start with 1
-        l_val_values = model.trainer.logger.history[l_val].copy()
-        l_val_values.index = l_val_values.index + 1
-        l_train_values = model.trainer.logger.history[l_train].copy()
-        l_train_values.index = l_train_values.index + 1
-        for l_values, c, alpha, dp in [
-            (l_train_values, "tab:blue", 1, epochs_detail_plot),
-            (l_val_values, "tab:orange", 0.5, epochs_detail_plot),
-        ]:
-            axs[0, ax_i].plot(l_values.index, l_values.values.ravel(), c=c, alpha=alpha)
-            axs[0, ax_i].set_title(l_name)
-            axs[1, ax_i].plot(
-                l_values.index[dp:],
-                l_values.values.ravel()[dp:],
-                c=c,
-                alpha=alpha,
-            )
-
-    fig.tight_layout()
-    fig.savefig(Path(output_path) / "sysvi_losses.png", dpi=200)

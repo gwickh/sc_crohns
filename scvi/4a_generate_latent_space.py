@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Train latent space model on reference data and project query data."""
 
+import uuid
 from pathlib import Path
 
 import anndata as ad
@@ -16,7 +17,11 @@ from utils.scVI_train_utils import (
     scvi_get_embeddings_and_normalized_expression,
     scvi_train,
 )
-from utils.sysVI_train_utils import MissingAnnDataMetadataError, train_sysvi
+from utils.sysVI_train_utils import (
+    MissingAnnDataMetadataError,
+    sample_sysvi_init,
+    train_sysvi,
+)
 
 import scvi
 
@@ -68,7 +73,7 @@ scheduler_kwargs = {
 }
 
 
-def generate_latent_space(adata, method) -> scvi.model.SCVI:
+def generate_latent_space(adata, method, run_id) -> scvi.model.SCVI:
     """Train latent space model on reference data and project query data."""
     if method.lower() == "scvi":
         print("Training scVI model...")
@@ -87,7 +92,14 @@ def generate_latent_space(adata, method) -> scvi.model.SCVI:
 
     elif method.lower() == "sysvi":
         print("Training SysVI model...")
-        model = train_sysvi(adata, SCVI_PATH)
+        cfg = sample_sysvi_init()
+
+        model = train_sysvi(
+            adata=adata,
+            output_path=SCVI_PATH,
+            run_id=run_id,
+            **cfg,
+        )
 
     else:
         raise NotImplementedError
@@ -135,7 +147,8 @@ def main() -> None:
         subset=True,
     )
 
-    model = generate_latent_space(adata=adata, method="sysvi")
+    run_id = uuid.uuid4().hex[:8]
+    model = generate_latent_space(adata=adata, method="sysvi", run_id=run_id)
 
     adata_full = adata.copy()
 
@@ -143,7 +156,7 @@ def main() -> None:
         adata=adata_full,
         model=model,
         scvi_path=SCVI_PATH,
-        outfile="gca_ref_sysvi.h5ad",
+        outfile=f"{run_id}_gca_sysvi.h5ad",
     )
 
 
