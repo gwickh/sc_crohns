@@ -1,14 +1,22 @@
 import os
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import scanpy as sc
 from matplotlib import pyplot as plt
 from matplotlib import ticker as mtick
 
-PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output"
-ADATA_IN = os.path.join(PATH, "gca_ref_sysvi.h5ad")
-ADATA_OUT = os.path.join(PATH, "sysvi_concat_umaps.h5ad")
+pd.options.mode.string_storage = "python"
+ad.settings.allow_write_nullable_strings = True
+
+PATH = (
+    "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning"
+)
+
+prefix = "ed7b4c8f"
+ADATA_IN = os.path.join(PATH, f"{prefix}_gca_sysvi.h5ad")
+ADATA_OUT = os.path.join(PATH, f"{prefix}_gca_sysvi_umaps.h5ad")
 
 adata = sc.read_h5ad(ADATA_IN)
 
@@ -77,14 +85,14 @@ save_umap_pdf(
     adata,
     umap_key="X_umap_full",
     color="sample_id",
-    out_pdf=os.path.join(PATH, f"UMAP_{REDUCT_KEY}_metadata.pdf"),
+    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_{REDUCT_KEY}_metadata.pdf"),
 )
 
 save_umap_pdf(
     adata,
     umap_key="X_umap_full",
     color="platform",
-    out_pdf=os.path.join(PATH, f"UMAP_{REDUCT_KEY}_platform.pdf"),
+    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_{REDUCT_KEY}_platform.pdf"),
 )
 
 adata_c = adata[adata.obs["sample_id"].isin(CROHNS)].copy()
@@ -106,7 +114,7 @@ save_umap_pdf(
     adata_c,
     umap_key="X_umap_crohns",
     color="sample_id",
-    out_pdf=os.path.join(PATH, f"UMAP_Crohns_{REDUCT_KEY}_metadata.pdf"),
+    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_Crohns_{REDUCT_KEY}_metadata.pdf"),
 )
 
 adata_n = adata[adata.obs["sample_id"].isin(NORMAL)].copy()
@@ -128,7 +136,7 @@ save_umap_pdf(
     adata_n,
     umap_key="X_umap_normal",
     color="sample_id",
-    out_pdf=os.path.join(PATH, f"UMAP_Normal_{REDUCT_KEY}_metadata.pdf"),
+    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_Normal_{REDUCT_KEY}_metadata.pdf"),
 )
 
 adata.obsm["X_umap_crohns"] = np.full((adata.n_obs, 2), np.nan, dtype=np.float32)
