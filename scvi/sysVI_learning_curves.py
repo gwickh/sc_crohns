@@ -2,7 +2,6 @@
 """Plot learning curves for training sysVI model."""
 
 from pathlib import Path
-from typing import NoReturn
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -16,7 +15,7 @@ def concatenate_sysvi_losses(
     pattern: str,
     output_file: str,
     input_dir: str = ".",
-) -> NoReturn:
+) -> None:
     """Concatenate sysVI loss CSV files into a single CSV."""
     input_dir = Path(input_dir)
 
