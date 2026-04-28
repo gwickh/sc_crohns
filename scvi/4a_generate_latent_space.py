@@ -13,7 +13,6 @@ from utils.scVI_hyperparameter_search_utils import (
     scvi_hyperparameter_search,
 )
 from utils.scVI_train_utils import (
-    load_ref_obj,
     scvi_get_embeddings_and_normalized_expression,
     scvi_train,
 )
@@ -128,12 +127,14 @@ def check_adata(adata: sc.AnnData) -> None:
     adata = adata[:, keep].copy()
     adata.var_names = adata.var["ensembl_id"].astype(str).to_numpy()
 
+    adata = adata[adata.obs["predicted_doublet"] != "doublet"].copy()
+
     return adata
 
 
 def main() -> None:
     """Run scVI training and get embeddings."""
-    adata = load_ref_obj(GCA_OBJ_PATH, REF_OBJ_PATH)
+    # adata = load_ref_obj(GCA_OBJ_PATH, REF_OBJ_PATH)
     adata = sc.read_h5ad(
         "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
     )
@@ -156,7 +157,7 @@ def main() -> None:
         adata=adata_full,
         model=model,
         scvi_path=SCVI_PATH,
-        outfile=f"{run_id}_gca_sysvi.h5ad",
+        outfile=f"{run_id}_sysvi.h5ad",
     )
 
 
