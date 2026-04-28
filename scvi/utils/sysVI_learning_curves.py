@@ -329,8 +329,7 @@ def make_top10_sysvi_learning_curves(
         print("Missing params with no matching losses file:")
         print(", ".join(missing))
 
-
-if __name__ == "__main__":
+def main() -> None:
     concatenate_sysvi_losses(
         input_dir=tuning_dir,
         pattern="*_sysvi_losses.csv",
@@ -358,3 +357,6 @@ if __name__ == "__main__":
         output_plot="sysvi_top10_learning_curves.png",
         recursive=True,
     )
+
+if __name__ == "__main__":
+    main()
