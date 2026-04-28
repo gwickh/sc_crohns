@@ -72,6 +72,11 @@ def train_sysvi(
     max_epochs: int = 100,
     batch_size: int = 256,
 ):
+    outdir = output_path / "sysvi_tuning"
+
+    if not outdir.exists():
+        outdir.mkdir(parents=True, exist_ok=True)
+
     """Train sysVI on the given AnnData and save the model."""
     SysVI.setup_anndata(
         adata,
@@ -93,7 +98,7 @@ def train_sysvi(
         batch_size=batch_size,
         early_stopping=True,
         early_stopping_monitor="elbo_validation",
-        early_stopping_patience=20,
+        early_stopping_patience=10,
         check_val_every_n_epoch=1,
         plan_kwargs={
             "lr": lr,
@@ -104,7 +109,7 @@ def train_sysvi(
         },
     )
 
-    model.save(output_path / f"{run_id}_sysvi_model", overwrite=True)
+    model.save(outdir / f"{run_id}_sysvi_model", overwrite=True)
 
     params = {
         "run_id": run_id,
@@ -121,13 +126,13 @@ def train_sysvi(
     }
 
     pd.DataFrame([params]).to_csv(
-        output_path / f"{run_id}_sysvi_params.csv",
+        outdir / f"{run_id}_sysvi_params.csv",
         index=False,
     )
 
     history_df = pd.DataFrame({k: v.squeeze() for k, v in model.history.items()})
     history_df.to_csv(
-        output_path / f"{run_id}_sysvi_losses.csv",
+        outdir / f"{run_id}_sysvi_losses.csv",
         index=True,
     )
 

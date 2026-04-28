@@ -26,6 +26,7 @@ def add_cell_type_annotation(
     query_adata = sc.read_h5ad(query_adata_file)
 
     if cell_type_key in query_adata.obs.columns:
+        print(f"{cell_type_key} already exists in query data, skipping annotation.")
         return
 
     if cell_type_key not in cell_type_ref_adata.obs.columns:
@@ -46,10 +47,6 @@ def add_cell_type_annotation(
         cell_type_ref_adata[cell_type_ref_adata.obs["platform"] == "10X"].obs_names,
     )
 
-    missing_query_obs = cell_type_ref_adata[
-        cell_type_ref_adata.obs["platform"] == "10X"
-    ].obs_names.difference(query_adata[query_adata.obs["platform"] == "10X"].obs_names)
-
     if len(missing_ref_obs) > 0:
         msg = f"""{len(missing_ref_obs)} query cells are missing from reference.\n
         query: {query_adata.obs_names[:10].tolist()}\n
@@ -57,17 +54,6 @@ def add_cell_type_annotation(
         """
         pd.DataFrame(missing_ref_obs).to_csv(
             Path(tuning_dir) / "missing_from_reference.csv",
-            index=False,
-        )
-        raise ValueError(msg)
-
-    if len(missing_query_obs) > 0:
-        msg = f"""{len(missing_query_obs)} reference cells are missing from query.\n
-        query: {query_adata.obs_names[:10].tolist()}\n
-        ref: {cell_type_ref_adata.obs_names[:10].tolist()}
-        """
-        pd.DataFrame(missing_query_obs).to_csv(
-            Path(tuning_dir) / "missing_from_query.csv",
             index=False,
         )
         raise ValueError(msg)
