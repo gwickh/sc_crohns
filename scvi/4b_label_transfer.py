@@ -28,10 +28,11 @@ def main() -> None:
     """Run label transfer."""
     adata = sc.read_h5ad(ADATA_OBJ_PATH)
     adata = adata[adata.obs["predicted_doublet"] != "doublet"].copy()
-    adata.obs["batch"] = adata.obs["platform"]
+    adata = adata[adata.obs["platform"] != "Parse"].copy()
+    adata.obs["batch"] = "10X"
 
     train_scanvi_ref(SCVI_PATH)
-    train_scanvi_query(adata, SCVI_PATH)
+    train_scanvi_query(adata, label="Integrated_05", scvi_path=SCVI_PATH)
 
 
 if __name__ == "__main__":
