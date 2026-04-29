@@ -16,13 +16,13 @@ from utils.scVI_train_utils import (
     scvi_get_embeddings_and_normalized_expression,
     scvi_train,
 )
-from utils.sysVI_train_utils import (
+
+import scvi
+from scvi.sysVI_train_utils import (
     MissingAnnDataMetadataError,
     sample_sysvi_init,
     train_sysvi,
 )
-
-import scvi
 
 # set pandas string handling to use builtin str type, not pyarrow to avoid IO issues
 pd.options.mode.string_storage = "python"
