@@ -32,14 +32,14 @@ def concatenate_sysvi_losses(
 
 
 def plot_sysvi_learning_curves(
-    csv_file: str,
+    input_csv: str,
     tuning_dir: Path = TUNING_DIR,
     alpha: float = 0.7,
     linewidth: float = 1.5,
     output_file: str | None = None,
 ) -> None:
     """Plot learning curves from a sysVI training history CSV file."""
-    df = pd.read_csv(tuning_dir / csv_file)
+    df = pd.read_csv(tuning_dir / input_csv)
 
     # pick x-axis
     if "epoch" in df.columns:
@@ -51,11 +51,11 @@ def plot_sysvi_learning_curves(
             df = df.rename(columns={unnamed[0]: "epoch"})
             x_col = "epoch"
         else:
-            msg = f"""Could not find an epoch column in {csv_file}."""
+            msg = f"""Could not find an epoch column in {input_csv}."""
             raise ValueError(msg)
 
     if "params" not in df.columns:
-        msg = f"Expected a 'params' column in {csv_file} to differentiate trials."
+        msg = f"Expected a 'params' column in {input_csv} to differentiate trials."
         raise ValueError(msg)
 
     metrics = [
@@ -102,11 +102,8 @@ def plot_sysvi_learning_curves(
     fig.suptitle("sysVI learning curves across all trials")
     fig.tight_layout()
 
-    if output_file:
-        fig.savefig(Path(csv_file).parent / output_file, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-    else:
-        plt.show()
+    fig.savefig(tuning_dir / output_file, dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
 def make_sysvi_final_epoch_summary(
@@ -272,6 +269,7 @@ def get_top10_sysvi_learning_curves(
     missing = set(top10_params) - found
     for f in missing:
         for m in list(tuning_dir.glob(f"{f}*")):
+            print(m)
             if m.is_file():
                 shutil.copy2(m, (tuning_dir / "_notselected" / m.name))
 
@@ -349,7 +347,7 @@ def plot_top10_sysvi_train_val_curves(
     ]
 
     for _, row in combined.iterrows():
-        run_id = row["run_id"]
+        run_id = row["params"]
         metrics_file = tuning_dir / f"{run_id}_sysvi_losses.csv"
         if not metrics_file.exists():
             print(f"[skip] Missing metrics file: {metrics_file}")
@@ -383,7 +381,10 @@ def plot_top10_sysvi_train_val_curves(
         fig.suptitle(f"sysVI learning curves: {run_id}", fontsize=14)
         fig.tight_layout()
 
-        out_file = output_dir / f"{run_id}_train_val_learning_curves.png"
+        (tuning_dir / Path(output_dir)).mkdir(exist_ok=True)
+        out_file = (
+            tuning_dir / Path(output_dir) / f"{run_id}_train_val_learning_curves.png"
+        )
         fig.savefig(out_file, dpi=300, bbox_inches="tight")
 
         plt.close(fig)
