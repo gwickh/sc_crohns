@@ -6,6 +6,7 @@ from pathlib import Path
 import anndata as ad
 import pandas as pd
 import scanpy as sc
+from scib_metrics.benchmark import BatchCorrection, Benchmarker, BioConservation
 
 # set pandas string handling to use builtin str type, not pyarrow to avoid IO issues
 pd.options.mode.string_storage = "python"
@@ -62,10 +63,31 @@ def add_cell_type_annotation(
         cell_type_ref_adata.obs[cell_type_key].reindex(query_adata.obs_names).to_numpy()
     )
 
-    query_adata.write_h5ad(f"{query_adata_file}_with_10X_labels.h5ad")
+    query_adata.write_h5ad(query_adata_file)
 
 
-def main():
+def compute_metrics(
+    query_adata_file: Path,
+) -> pd.DataFrame:
+    """Compute integration and biological preservation metrics for sysVI."""
+    query_adata = sc.read_h5ad(query_adata_file)
+
+    bm = Benchmarker(
+        query_adata,
+        batch_key="platform",
+        label_key="Integrated_05",
+        bio_conservation_metrics=BioConservation(),
+        batch_correction_metrics=BatchCorrection(),
+        embedding_obsm_keys=["X_embeddings"],
+        n_jobs=6,
+    )
+    bm.benchmark()
+    metrics = bm.get_results(min_max_scale=False)
+
+    return pd.DataFrame(metrics)
+
+
+def main() -> None:
     """Compute metrics for sysVI."""
     cell_type_ref_adata = sc.read_h5ad(Path(ref_dir) / "query_concat.h5ad")
 
@@ -78,6 +100,8 @@ def main():
                 cell_type_ref_adata=cell_type_ref_adata,
                 query_adata_file=file,
             )
+            metrics = compute_metrics(file)
+            metrics.to_csv(f"{file}.metrics.csv", index=False)
         except OSError as err:
             print(f"[skip] Could not read {file}: {err}")
         continue
