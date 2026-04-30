@@ -10,12 +10,10 @@ from matplotlib import ticker as mtick
 pd.options.mode.string_storage = "python"
 ad.settings.allow_write_nullable_strings = True
 
-PATH = (
-    "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning"
-)
+PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning/old"
 
-prefix = "ed7b4c8f"
-ADATA_IN = os.path.join(PATH, f"{prefix}_gca_sysvi.h5ad")
+prefix = "a848a9e4"
+ADATA_IN = os.path.join(PATH, f"{prefix}_sysvi.h5ad")
 ADATA_OUT = os.path.join(PATH, f"{prefix}_gca_sysvi_umaps.h5ad")
 
 adata = sc.read_h5ad(ADATA_IN)
