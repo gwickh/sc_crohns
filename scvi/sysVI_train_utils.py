@@ -4,6 +4,7 @@
 import json
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -62,6 +63,7 @@ def sample_sysvi_init() -> dict:
 
 
 def load_adata(adata_path: str) -> sc.AnnData:
+    """Load AnnData object and perform necessary preprocessing for sysVI."""
     adata = sc.read_h5ad(adata_path)
 
     sc.pp.highly_variable_genes(
@@ -95,11 +97,10 @@ def load_adata(adata_path: str) -> sc.AnnData:
 
 
 def train_sysvi_tune(config: dict, adata: sc.AnnData, output_path: str) -> None:
-    "Saves the best validation checkpoint and reports it back to Ray."
-
+    """Save best validation checkpoint and report to Ray."""
     output_path = Path(output_path)
 
-    run_id = config.get("run_id", "trial")
+    run_id = config.get("run_id", uuid.uuid4().hex[:8])
 
     outdir = output_path / run_id
     outdir.mkdir(parents=True, exist_ok=True)
@@ -170,7 +171,7 @@ def train_sysvi_tune(config: dict, adata: sc.AnnData, output_path: str) -> None:
     best_epoch = int(history_df["elbo_validation"].idxmin())
 
     # Save metadata
-    with open(outdir / "summary.json", "w") as f:
+    with Path.open(outdir / "summary.json", "w") as f:
         json.dump(
             {
                 "run_id": run_id,
@@ -194,14 +195,21 @@ def train_sysvi_tune(config: dict, adata: sc.AnnData, output_path: str) -> None:
         best_scvi_dir.mkdir(parents=True, exist_ok=True)
 
         best_model_path = Path(best_ckpt_callback.best_model_path)
+
         if best_model_path.exists():
-            shutil.copy2(best_model_path, best_scvi_dir / best_model_path.name)
+            dst = best_scvi_dir / best_model_path.name
+            if best_model_path.is_dir():
+                shutil.copytree(best_model_path, dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(best_model_path, dst)
 
         shutil.copy2(
-            outdir / f"{run_id}_sysvi_params.csv", tmpdir / f"{run_id}_sysvi_params.csv"
+            outdir / f"{run_id}_sysvi_params.csv",
+            tmpdir / f"{run_id}_sysvi_params.csv",
         )
         shutil.copy2(
-            outdir / f"{run_id}_sysvi_losses.csv", tmpdir / f"{run_id}_sysvi_losses.csv"
+            outdir / f"{run_id}_sysvi_losses.csv",
+            tmpdir / f"{run_id}_sysvi_losses.csv",
         )
         shutil.copy2(outdir / "summary.json", tmpdir / "summary.json")
 
@@ -217,6 +225,7 @@ def train_sysvi_tune(config: dict, adata: sc.AnnData, output_path: str) -> None:
 
 
 def make_search_space(num_samples: int) -> list[dict]:
+    """Generate a list of random hyperparameter configurations for sysVI tuning."""
     return [
         sample_sysvi_init() | {"run_id": f"trial_{i:03d}"} for i in range(num_samples)
     ]
@@ -227,6 +236,7 @@ def run_sysvi_tuning(
     output_path: str,
     num_samples: int = 50,
 ):
+    """Run Ray Tune hyperparameter tuning for sysVI."""
     search_space = {
         "n_latent": tune.choice([10, 15, 20, 30, 40]),
         "n_prior_components": tune.choice([5, 10, 20, 30, 40]),
@@ -279,11 +289,12 @@ def run_sysvi_tuning(
 
 
 def main():
+    """Run sysVI hyperparameter tuning."""
     adata_path = Path(
-        "/hpc-home/yep25yan/project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad"
+        "/hpc-home/yep25yan/project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
     ).resolve()
     output_path = Path(
-        "/hpc-home/yep25yan/project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning"
+        "/hpc-home/yep25yan/project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning",
     ).resolve()
 
     adata = load_adata(adata_path)
