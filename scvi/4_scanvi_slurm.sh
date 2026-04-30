@@ -27,7 +27,7 @@ scripts=(
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
-    sysVI_train_utils.py
+    sysVI_compute_metrics.py
 )
 
 for script in "${scripts[@]}"; do
