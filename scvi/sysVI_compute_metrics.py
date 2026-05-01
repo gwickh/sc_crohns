@@ -13,7 +13,7 @@ pd.options.mode.string_storage = "python"
 ad.settings.allow_write_nullable_strings = True
 
 ref_dir = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/"
-tuning_dir = f"{ref_dir}/sysvi_tuning/old"
+tuning_dir = f"{ref_dir}/sysvi_tuning"
 
 
 def add_cell_type_annotation(

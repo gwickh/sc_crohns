@@ -13,11 +13,11 @@ TUNING_DIR = Path(
 
 
 def concatenate_sysvi_losses(
-    input_dir: str = TUNING_DIR,
+    input_dir: Path = TUNING_DIR,
 ) -> None:
     """Concatenate sysVI loss CSV files into a single CSV."""
     dfs = []
-    for file in sorted(input_dir.glob("*_sysvi_losses.csv")):
+    for file in sorted(input_dir.glob("*/*_sysvi_losses.csv")):
         params = file.name.split("_sysvi_losses.csv")[0]
 
         df = pd.read_csv(file)
@@ -106,12 +106,12 @@ def plot_sysvi_learning_curves(
     plt.close(fig)
 
 
-def make_sysvi_final_epoch_summary(
+def make_sysvi_min_epoch_summary(
     tuning_dir: Path = TUNING_DIR,
     input_csv: str = "sysvi_losses.csv",
-    output_csv: str = "sysvi_final_epoch_summary.csv",
+    output_csv: str = "sysvi_min_epoch_summary.csv",
 ) -> None:
-    """Create a summary CSV with the final epoch metrics for each sysVI trial."""
+    """Create a summary CSV with the minimum validation ELBO epoch for each sysVI trial."""
     df = pd.read_csv(tuning_dir / input_csv)
 
     # recover epoch column if it was saved as unnamed index
@@ -125,6 +125,10 @@ def make_sysvi_final_epoch_summary(
 
     if "params" not in df.columns:
         msg = f"Expected a 'params' column in {input_csv}."
+        raise ValueError(msg)
+
+    if "elbo_validation" not in df.columns:
+        msg = f"Expected an 'elbo_validation' column in {input_csv}."
         raise ValueError(msg)
 
     metric_cols = [
@@ -145,14 +149,28 @@ def make_sysvi_final_epoch_summary(
 
     metric_cols = [c for c in metric_cols if c in df.columns]
 
-    # take the final epoch row for each trial
+    # make sure ELBO is numeric
+    df["elbo_validation"] = pd.to_numeric(df["elbo_validation"], errors="coerce")
+
+    # remove rows where elbo_validation is missing
+    df_valid = df.dropna(subset=["elbo_validation"]).copy()
+
+    if df_valid.empty:
+        raise ValueError("No valid numeric values found in 'elbo_validation'.")
+
+    # get row index of minimum validation ELBO for each trial
+    min_idx = df_valid.groupby("params")["elbo_validation"].idxmin()
+
     summary = (
-        df.sort_values(["params", "epoch"])
-        .groupby("params", as_index=False)
-        .tail(1)
-        .loc[:, ["params", "epoch", *metric_cols]]
-        .sort_values("elbo_validation", ascending="elbo_validation" not in metric_cols)
+        df_valid.loc[min_idx, ["params", "epoch", *metric_cols]]
+        .sort_values("elbo_validation", ascending=True)
         .reset_index(drop=True)
+    )
+
+    summary = summary.rename(
+        columns={
+            "epoch": "best_epoch",
+        }
     )
 
     summary.to_csv(tuning_dir / output_csv, index=False)
@@ -221,33 +239,29 @@ def rank_sysvi_runs(
     df.to_csv(tuning_dir / input_csv, index=False)
 
 
-def get_top10_sysvi_learning_curves(
+def get_top20_sysvi_learning_curves(
     tuning_dir: Path = TUNING_DIR,
-    input_csv: str = "sysvi_final_epoch_summary.csv",
-    output_csv: str = "sysvi_top10_learning_curves.csv",
+    input_csv: str = "sysvi_min_epoch_summary.csv",
+    output_csv: str = "sysvi_top20_learning_curves.csv",
 ):
-    """Plot learning curves for the top 10 ranked sysVI runs."""
+    """Plot learning curves for the top 20 ranked sysVI runs."""
     summary = pd.read_csv(tuning_dir / input_csv)
     if "params" not in summary.columns:
         msg = f"'params' column not found in {tuning_dir / input_csv}"
         raise ValueError(msg)
 
-    top10_params = summary["params"].astype(str).head(10).tolist()
-
-    input_dir = tuning_dir
-    pattern = "*_sysvi_losses.csv"
-    files = input_dir.glob(pattern)
+    top20_params = summary["params"].astype(str).head(20).tolist()
 
     dfs = []
     found = set()
 
-    for file in sorted(files):
+    for file in sorted(tuning_dir.glob("*/*_sysvi_losses.csv")):
         name = file.name
         if not name.endswith("_sysvi_losses.csv"):
             continue
 
         params = name.split("_sysvi_losses.csv")[0]
-        if params not in top10_params:
+        if params not in top20_params:
             continue
 
         df = pd.read_csv(file)
@@ -266,7 +280,7 @@ def get_top10_sysvi_learning_curves(
 
     (tuning_dir / "_notselected").mkdir(exist_ok=True)
 
-    missing = set(top10_params) - found
+    missing = set(top20_params) - found
     for f in missing:
         for m in list(tuning_dir.glob(f"{f}*")):
             print(m)
@@ -277,12 +291,12 @@ def get_top10_sysvi_learning_curves(
     combined.to_csv(tuning_dir / output_csv, index=False)
 
 
-def plot_top10_sysvi_learning_curves(
+def plot_top20_sysvi_learning_curves(
     input_csv: str,
     output_plot: str,
     tuning_dir: Path = TUNING_DIR,
 ) -> None:
-    """Plot learning curves for the top 10 ranked sysVI runs."""
+    """Plot learning curves for the top 20 ranked sysVI runs."""
     combined = pd.read_csv(tuning_dir / input_csv)
 
     metrics = [
@@ -325,18 +339,18 @@ def plot_top10_sysvi_learning_curves(
             bbox_to_anchor=(1.02, 0.5),
         )
 
-    fig.suptitle("sysVI learning curves for top 10 ranked runs")
+    fig.suptitle("sysVI learning curves for top 20 ranked runs")
     fig.tight_layout()
     fig.savefig(tuning_dir / output_plot, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
-def plot_top10_sysvi_train_val_curves(
+def plot_top20_sysvi_train_val_curves(
     input_csv: str,
     output_dir: Path,
     tuning_dir: Path = TUNING_DIR,
 ) -> None:
-    """Plot training and validation curves for the top 10 ranked sysVI runs."""
+    """Plot training and validation curves for the top 20 ranked sysVI runs."""
     combined = pd.read_csv(tuning_dir / input_csv)
 
     metric_pairs = [
@@ -348,7 +362,7 @@ def plot_top10_sysvi_train_val_curves(
 
     for _, row in combined.iterrows():
         run_id = row["params"]
-        metrics_file = tuning_dir / f"{run_id}_sysvi_losses.csv"
+        metrics_file = tuning_dir / run_id / f"{run_id}_sysvi_losses.csv"
         if not metrics_file.exists():
             print(f"[skip] Missing metrics file: {metrics_file}")
             continue
@@ -391,7 +405,7 @@ def plot_top10_sysvi_train_val_curves(
 
 
 def main() -> None:
-    """Collect top 10 trials and generate learning curves for sysVI tuning."""
+    """Collect top 20 trials and generate learning curves for sysVI tuning."""
     concatenate_sysvi_losses()
 
     plot_sysvi_learning_curves(
@@ -399,28 +413,28 @@ def main() -> None:
         output_file="sysvi_trials.png",
     )
 
-    make_sysvi_final_epoch_summary(
+    make_sysvi_min_epoch_summary(
         input_csv="sysvi_losses.csv",
-        output_csv="sysvi_final_epoch_summary.csv",
+        output_csv="sysvi_min_epoch_summary.csv",
     )
 
     rank_sysvi_runs(
-        input_csv="sysvi_final_epoch_summary.csv",
+        input_csv="sysvi_min_epoch_summary.csv",
     )
 
-    get_top10_sysvi_learning_curves(
-        input_csv="sysvi_final_epoch_summary.csv",
-        output_csv="sysvi_top10_learning_curves.csv",
+    get_top20_sysvi_learning_curves(
+        input_csv="sysvi_min_epoch_summary.csv",
+        output_csv="sysvi_top20_learning_curves.csv",
     )
 
-    plot_top10_sysvi_learning_curves(
-        input_csv="sysvi_top10_learning_curves.csv",
-        output_plot="sysvi_top10_learning_curves.png",
+    plot_top20_sysvi_learning_curves(
+        input_csv="sysvi_top20_learning_curves.csv",
+        output_plot="sysvi_top20_learning_curves.png",
     )
 
-    plot_top10_sysvi_train_val_curves(
-        input_csv="sysvi_top10_learning_curves.csv",
-        output_dir="top10_train_val_curves",
+    plot_top20_sysvi_train_val_curves(
+        input_csv="sysvi_top20_learning_curves.csv",
+        output_dir="top20_train_val_curves",
     )
 
 
