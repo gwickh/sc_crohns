@@ -136,15 +136,16 @@ def main() -> None:
         "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
     )
 
+    adata = check_adata(adata)
+
     sc.pp.highly_variable_genes(
         adata,
         flavor="seurat_v3",
         n_top_genes=5000,
+        layer="counts",
         batch_key="platform",
         subset=True,
     )
-
-    adata = check_adata(adata)
 
     # run_id = uuid.uuid4().hex[:8]
     # model = generate_latent_space(adata=adata, method="sysvi", run_id=run_id)
