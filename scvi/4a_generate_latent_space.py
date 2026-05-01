@@ -18,10 +18,9 @@ from utils.scVI_train_utils import (
 )
 
 import scvi
-from scvi.sysVI_train_utils import (
+from scvi.sysVI_hyperparameter_search_utils import (
     MissingAnnDataMetadataError,
     sample_sysvi_init,
-    train_sysvi,
 )
 
 # set pandas string handling to use builtin str type, not pyarrow to avoid IO issues
@@ -93,12 +92,12 @@ def generate_latent_space(adata, method, run_id) -> scvi.model.SCVI:
         print("Training SysVI model...")
         cfg = sample_sysvi_init()
 
-        model = train_sysvi(
-            adata=adata,
-            output_path=SCVI_PATH,
-            run_id=run_id,
-            **cfg,
-        )
+        # model = run_sysvi(
+        #     adata=adata,
+        #     output_path=SCVI_PATH,
+        #     run_id=run_id,
+        #     **cfg,
+        # )
 
     else:
         raise NotImplementedError
@@ -136,7 +135,6 @@ def main() -> None:
     adata = sc.read_h5ad(
         "project-area/data/crohns_scrnaseq/10c_14n_analysis/scanpy/adata_umap.h5ad",
     )
-    adata = check_adata(adata)
 
     sc.pp.highly_variable_genes(
         adata,
@@ -146,17 +144,30 @@ def main() -> None:
         subset=True,
     )
 
-    run_id = uuid.uuid4().hex[:8]
-    model = generate_latent_space(adata=adata, method="sysvi", run_id=run_id)
+    adata = check_adata(adata)
+
+    # run_id = uuid.uuid4().hex[:8]
+    # model = generate_latent_space(adata=adata, method="sysvi", run_id=run_id)
 
     adata_full = adata.copy()
 
-    scvi_get_embeddings_and_normalized_expression(
-        adata=adata_full,
-        model=model,
-        scvi_path=SCVI_PATH,
-        outfile=f"sysvi_tuning/{run_id}_sysvi.h5ad",
+    top_runs = (
+        pd.read_csv(SCVI_PATH / "sysvi_tuning" / "sysvi_min_epoch_summary.csv")
+        .head(20)["params"]
+        .tolist()
     )
+    for model in top_runs:
+        loaded_model = scvi.external.SysVI.load(
+            f"{SCVI_PATH}/sysvi_tuning/{model}/final_model",
+            adata=adata_full,
+        )
+
+        scvi_get_embeddings_and_normalized_expression(
+            adata=adata_full,
+            model=loaded_model,
+            scvi_path=SCVI_PATH,
+            outfile=f"sysvi_tuning/{model}_sysvi.h5ad",
+        )
 
 
 if __name__ == "__main__":
