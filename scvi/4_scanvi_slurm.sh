@@ -5,7 +5,7 @@
 #SBATCH --output=4_scvi_%j.SLURM.stdout
 #SBATCH --error=4_scvi_%j.SLURM.stderr
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=256G
+#SBATCH --mem=400GB
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-medium
@@ -27,7 +27,9 @@ scripts=(
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
-    sysVI_compute_metrics.py
+    sysVI_hyperparameter_search_utils.py
+    # sysVI_compute_metrics.py
+    # parse_label_transfer.py
 )
 
 for script in "${scripts[@]}"; do
