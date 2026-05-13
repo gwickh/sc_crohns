@@ -461,7 +461,7 @@ def main() -> None:
             js_d_list.append((n_neighbors, alpha, js_d))
 
     df = pd.DataFrame(js_d_list, columns=["n_neighbors", "alpha", "js_distance"])
-    df.to_csv(TUNING_DIR / "label_spreading_b_diagnosis_js_distance.csv", index=False)
+    df.to_csv(TUNING_DIR / "label_spreading_diagnosis_js_distance.csv", index=False)
 
 
 if __name__ == "__main__":
