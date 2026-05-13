@@ -144,25 +144,111 @@ def compute_bio_metrics(
     return pd.DataFrame(metrics).transpose()
 
 
+def compute_min_max_scaled_metrics(metrics_df, metric_cols):
+    """Compute min-max scaled metrics for sysVI."""
+    scaled_metrics_df = metrics_df.copy()
+
+    def scale_column(column):
+        for col in column:
+            min_val = metrics_df[col].min()
+            max_val = metrics_df[col].max()
+            if max_val - min_val > 0:
+                scaled_metrics_df[col] = (metrics_df[col] - min_val) / (
+                    max_val - min_val
+                )
+            else:
+                scaled_metrics_df[col] = 0.0
+        return scaled_metrics_df
+
+    scaled_metrics_df = scale_column(metric_cols[0])
+    scaled_metrics_df = scale_column(metric_cols[1])
+
+    scaled_metrics_df["batch_correction_score"] = scaled_metrics_df[
+        metric_cols[0]
+    ].mean(axis=1)
+
+    scaled_metrics_df["bio_conservation_score"] = scaled_metrics_df[
+        [
+            "isolated_labels",
+            "nmi_ari_cluster_labels_kmeans_nmi",
+            "nmi_ari_cluster_labels_kmeans_ari",
+            "silhouette_label",
+            "inverse_clisi_knn",
+        ]
+    ].mean(axis=1)
+
+    scaled_metrics_df["aggregate_score"] = (
+        0.4 * scaled_metrics_df["batch_correction_score"]
+        + 0.6 * scaled_metrics_df["bio_conservation_score"]
+    )
+
+    return scaled_metrics_df
+
+
+def compute_ranked_metrics(metrics_df, metric_cols):
+    """Compute ranked metrics for sysVI."""
+    ranked_metrics_df = metrics_df.copy()
+
+    for col in metric_cols[0] + [
+        "isolated_labels",
+        "nmi_ari_cluster_labels_kmeans_nmi",
+        "nmi_ari_cluster_labels_kmeans_ari",
+        "silhouette_label",
+        "inverse_clisi_knn",
+    ]:
+        ranked_metrics_df[col] = metrics_df[col].rank(ascending=False)
+
+    ranked_metrics_df["batch_correction_score"] = ranked_metrics_df[
+        metric_cols[0]
+    ].mean(axis=1)
+
+    ranked_metrics_df["bio_conservation_score"] = ranked_metrics_df[
+        [
+            "isolated_labels",
+            "nmi_ari_cluster_labels_kmeans_nmi",
+            "nmi_ari_cluster_labels_kmeans_ari",
+            "silhouette_label",
+            "inverse_clisi_knn",
+        ]
+    ].mean(axis=1)
+
+    ranked_metrics_df["aggregate_score"] = (
+        0.4 * ranked_metrics_df["batch_correction_score"]
+        + 0.6 * ranked_metrics_df["bio_conservation_score"]
+    )
+
+    return ranked_metrics_df
+
+
 def main() -> None:
     """Compute metrics for sysVI."""
     adatas = list(Path(tuning_dir).glob("*_sysvi.h5ad"))
     print(f"Found {len(adatas)} sysVI files.")
 
-    metrics_df = pd.DataFrame(
-        columns=[
-            "params",
+    metric_cols = [
+        [
             "ilisi_knn",
             "pcr_comparison",
+        ],
+        [
             "isolated_labels",
             "nmi_ari_cluster_labels_kmeans_nmi",
             "nmi_ari_cluster_labels_kmeans_ari",
             "silhouette_label",
             "clisi_knn",
+        ],
+    ]
+
+    metrics_df = pd.DataFrame(
+        columns=[
+            "params",
+            *metric_cols[0],
+            *metric_cols[1],
+            "inverse_clisi_knn",
             "batch_correction_score",
             "bio_conservation_score",
             "aggregate_score",
-        ]
+        ],
     )
     for file in adatas:
         try:
@@ -176,32 +262,24 @@ def main() -> None:
             params = str(file).split("/")[-1].split("_sysvi.h5ad")[0]
             metrics_df.loc[len(metrics_df), "params"] = params
 
-            metrics_df.loc[len(metrics_df) - 1, "ilisi_knn"] = integration_metrics.loc[
-                "X_embeddings", "ilisi_knn"
-            ]
+            for col in metric_cols[0]:
+                metrics_df.loc[len(metrics_df) - 1, col] = integration_metrics.loc[
+                    "X_embeddings",
+                    col,
+                ]
 
-            metrics_df.loc[len(metrics_df) - 1, "pcr_comparison"] = (
-                integration_metrics.loc["X_embeddings", "pcr_comparison"]
-            )
+            for col in metric_cols[1]:
+                metrics_df.loc[len(metrics_df) - 1, col] = bio_metrics.loc[
+                    "X_embeddings",
+                    col,
+                ]
 
-            metrics_df.loc[len(metrics_df) - 1, "isolated_labels"] = bio_metrics.loc[
-                "X_embeddings", "isolated_labels"
-            ]
-
-            metrics_df.loc[len(metrics_df) - 1, "nmi_ari_cluster_labels_kmeans_nmi"] = (
-                bio_metrics.loc["X_embeddings", "nmi_ari_cluster_labels_kmeans_nmi"]
+            metrics_df.loc[len(metrics_df) - 1, "inverse_clisi_knn"] = 1.0 - float(
+                bio_metrics.loc["X_embeddings", "clisi_knn"],
             )
-            metrics_df.loc[len(metrics_df) - 1, "nmi_ari_cluster_labels_kmeans_ari"] = (
-                bio_metrics.loc["X_embeddings", "nmi_ari_cluster_labels_kmeans_ari"]
-            )
-            metrics_df.loc[len(metrics_df) - 1, "silhouette_label"] = bio_metrics.loc[
-                "X_embeddings", "silhouette_label"
-            ]
 
             metrics_df.loc[len(metrics_df) - 1, "batch_correction_score"] = (
-                metrics_df.loc[len(metrics_df) - 1, ["ilisi_knn", "pcr_comparison"]]
-                .astype(float)
-                .mean()
+                metrics_df.loc[len(metrics_df) - 1, metric_cols[0]].astype(float).mean()
             )
 
             metrics_df.loc[len(metrics_df) - 1, "bio_conservation_score"] = (
@@ -212,7 +290,7 @@ def main() -> None:
                         "nmi_ari_cluster_labels_kmeans_nmi",
                         "nmi_ari_cluster_labels_kmeans_ari",
                         "silhouette_label",
-                        "clisi_knn",
+                        "inverse_clisi_knn",
                     ],
                 ]
                 .astype(float)
@@ -220,16 +298,22 @@ def main() -> None:
             )
 
             metrics_df.loc[len(metrics_df) - 1, "aggregate_score"] = 0.4 * float(
-                metrics_df.loc[len(metrics_df) - 1, "batch_correction_score"]
+                metrics_df.loc[len(metrics_df) - 1, "batch_correction_score"],
             ) + 0.6 * float(
-                metrics_df.loc[len(metrics_df) - 1, "bio_conservation_score"]
+                metrics_df.loc[len(metrics_df) - 1, "bio_conservation_score"],
             )
 
         except OSError as err:
             print(f"[skip] Could not read {file}: {err}")
         continue
 
-    metrics_df.to_csv(Path(tuning_dir) / "metrics.csv", index=False)
+    metrics_df.to_csv(Path(tuning_dir) / "raw_metrics.csv", index=False)
+
+    ranked_metrics_df = compute_ranked_metrics(metrics_df, metric_cols)
+    ranked_metrics_df.to_csv(Path(tuning_dir) / "ranked_metrics.csv", index=False)
+
+    scaled_metrics_df = compute_min_max_scaled_metrics(metrics_df, metric_cols)
+    scaled_metrics_df.to_csv(Path(tuning_dir) / "scaled_metrics.csv", index=False)
 
 
 if __name__ == "__main__":
