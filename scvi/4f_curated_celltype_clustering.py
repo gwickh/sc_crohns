@@ -1,20 +1,29 @@
-import scanpy as sc
-import matplotlib as mpl
-from matplotlib import pyplot as plt
+#!/usr/bin/env python3
+"""Curate cell type annotations and generate UMAP visualisations."""
+
+from pathlib import Path
+
+import anndata as ad
 import matplotlib.ticker as mtick
-import seaborn as sns
-import os
 import numpy as np
 import pandas as pd
+import scanpy as sc
+import seaborn as sns
+from matplotlib import pyplot as plt
 
-PATH = "project-area/data/crohns_scrnaseq/scvi_tools_output/Integrated_05_label" 
-label =  "Integrated_05"
-REDUCT_NAME = "X_embeddings"+label
-adata = sc.read_h5ad(os.path.join(PATH, "query_concat.h5ad"))
+pd.options.mode.string_storage = "python"
+ad.settings.allow_write_nullable_strings = True
+
+PATH = Path("project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/")
+adata = sc.read_h5ad(
+    PATH / "c561826c_sysvi_label_spreading_UMAP_X_embeddings_umaps.h5ad",
+)
 
 # filter rare labels
-min_cells = 10
+REDUCT_NAME = "X_embeddings"
 
+min_cells = 10
+label = "label_spreading_prediction_filtered"
 counts = adata.obs[label].value_counts()
 keep_labels = counts[counts >= min_cells].index
 mask = adata.obs[label].isin(keep_labels)
@@ -22,10 +31,18 @@ mask = adata.obs[label].isin(keep_labels)
 adata = adata[mask].copy()
 
 # count number of cells in crohn's disease and normal
-diseased_samples = ["C_03", "C_08", "C_13"]
+sample_id = adata.obs["sample_id"].astype(str)
 
-num_diseased_cells = adata[adata.obs["sample_id"].isin(diseased_samples)].shape[0]
-num_normal_cells = adata[~adata.obs["sample_id"].isin(diseased_samples)].shape[0]
+crohns_samples = sorted(
+    sample_id[sample_id.str.contains("crohns", case=False, na=False)].unique().tolist(),
+)
+
+normal_samples = sorted(
+    sample_id[sample_id.str.contains("normal", case=False, na=False)].unique().tolist(),
+)
+
+num_diseased_cells = adata[adata.obs["sample_id"].isin(crohns_samples)].shape[0]
+num_normal_cells = adata[~adata.obs["sample_id"].isin(crohns_samples)].shape[0]
 
 print(f"Number of cells in Crohn's Disease: {num_diseased_cells}")
 print(f"Number of cells in Normal: {num_normal_cells}")
@@ -109,6 +126,13 @@ map_category = {
     "Treg": "T cells",
     "TRGV2 gdT": "T cells",
     "Tuft": "Epithelial",
+    "Fetal venous EC": "Endothelial",
+    "TRGV4 gdT": "T cells",
+    "TRGV5/7 gdT": "T cells",
+    "myofibroblast (RSPO2+)": "Mesenchymal",
+    "LEC4 (STAB2+)": "Endothelial",
+    "LEC2 (MADCAM1+)": "Endothelial",
+    "Progenitor (NEUROG3+)": "Epithelial",
 }
 map_curated = {
     "Activated CD4 T": "CD4 T cell",
@@ -187,50 +211,57 @@ map_curated = {
     "Treg": "CD4 T cell",
     "TRGV2 gdT": "NK T cell",
     "Tuft": "Tuft",
+    "Fetal venous EC": "Endothelial",
+    "TRGV4 gdT": "NK T cell",
+    "TRGV5/7 gdT": "NK T cell",
+    "myofibroblast (RSPO2+)": "Myofibroblast",
+    "LEC4 (STAB2+)": "Endothelial",
+    "LEC2 (MADCAM1+)": "Endothelial",
+    "Progenitor (NEUROG3+)": "Enteroendocrine cell",
 }
 
 # reassign labels and save
-adata.obs["category"] = adata.obs["Integrated_05"].map(map_category)
-adata.obs["curated"]  = adata.obs["Integrated_05"].map(map_curated)
+adata.obs["category"] = adata.obs["label_spreading_prediction_filtered"].map(
+    map_category,
+)
+adata.obs["curated"] = adata.obs["label_spreading_prediction_filtered"].map(map_curated)
 
-diseased_samples = ["C_03", "C_08", "C_13"]
-adata.obs["Diagnosis"] = adata.obs["sample_id"].isin(diseased_samples)
-adata.obs["Diagnosis"] = adata.obs["Diagnosis"]\
-    .map({True: "Crohn's Disease", False: "Normal"})\
+adata.obs["Diagnosis"] = adata.obs["sample_id"].isin(crohns_samples)
+adata.obs["Diagnosis"] = (
+    adata.obs["Diagnosis"]
+    .map({True: "Crohn's Disease", False: "Normal"})
     .astype("category")
+)
 
-adata.write_h5ad(os.path.join(PATH, "query_concat_curated.h5ad"))
+adata.write_h5ad(PATH / "query_concat_curated.h5ad")
 
 # Joint UMAP on Integrated_05
 sc.pp.neighbors(adata, use_rep=REDUCT_NAME)
 sc.tl.umap(adata, min_dist=0.3)
 
-def umap_function(
-    color,
-    save_name
-):
+
+def umap_function(color, save_name) -> None:
+    """Generate and save UMAP plot colored by specified variable."""
     fig = sc.pl.umap(
         adata,
         color=color,
         frameon=True,
         legend_loc="right margin",
         return_fig=True,
-        show=False
+        show=False,
     )
 
     fig.set_size_inches(6, 6)
     fig.savefig(
-        os.path.join(PATH, save_name+".pdf"),
+        PATH / (save_name + ".pdf"),
         format="pdf",
         bbox_inches="tight",
-        pad_inches=0.2
+        pad_inches=0.2,
     )
 
+
 # coloured by diagnosis
-umap_function(
-    color="Diagnosis",
-    save_name="joint_UMAP_" + REDUCT_NAME + "_diagnosis"
-)
+umap_function(color="Diagnosis", save_name="joint_UMAP_" + REDUCT_NAME + "_diagnosis")
 
 # coloured by sample_id
 adata.obs["sample_id"] = adata.obs["sample_id"].astype("category")
@@ -258,18 +289,17 @@ sc.pl.umap(
     legend_loc="right margin",
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 sc.pl.umap(
     adata_normal,
     color="sample_id",
     frameon=True,
-
     legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 for ax in axes:
@@ -277,7 +307,7 @@ for ax in axes:
     ax.set_ylim(*ylim)
 
 fig.savefig(
-    os.path.join(PATH, f"joint_UMAP_{REDUCT_NAME}_sample_id.pdf"),
+    PATH / f"joint_UMAP_{REDUCT_NAME}_sample_id.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -309,7 +339,7 @@ sc.pl.umap(
     legend_loc="right margin",
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 sc.pl.umap(
@@ -319,7 +349,7 @@ sc.pl.umap(
     legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 for ax in axes:
@@ -327,7 +357,7 @@ for ax in axes:
     ax.set_ylim(*ylim)
 
 fig.savefig(
-    os.path.join(PATH, f"joint_UMAP_{REDUCT_NAME}_sample_id.pdf"),
+    PATH / f"joint_UMAP_{REDUCT_NAME}_sample_id.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -351,9 +381,11 @@ xlim = (xy[:, 0].min() - pad, xy[:, 0].max() + pad)
 ylim = (xy[:, 1].min() - pad, xy[:, 1].max() + pad)
 
 fig, axes = plt.subplots(
-    1, 2, figsize=(12, 6),
+    1,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"width_ratios": [1, 1]},
-    constrained_layout=True
+    constrained_layout=True,
 )
 
 # left panel (no legend)
@@ -361,10 +393,10 @@ sc.pl.umap(
     adata_crohns,
     color="category",
     frameon=True,
-    legend_loc=None,           
+    legend_loc=None,
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 # right panel (with legend)
@@ -372,19 +404,19 @@ sc.pl.umap(
     adata_normal,
     color="category",
     frameon=True,
-    legend_loc="right margin", 
+    legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 for ax in axes:
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
-    ax.set_aspect("equal")  
+    ax.set_aspect("equal")
 
 fig.savefig(
-    os.path.join(PATH, f"joint_UMAP_{REDUCT_NAME}_category.pdf"),
+    PATH / f"joint_UMAP_{REDUCT_NAME}_category.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -409,9 +441,11 @@ xlim = (xy[:, 0].min() - pad, xy[:, 0].max() + pad)
 ylim = (xy[:, 1].min() - pad, xy[:, 1].max() + pad)
 
 fig, axes = plt.subplots(
-    1, 2, figsize=(12, 6),
+    1,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"width_ratios": [1, 1]},
-    constrained_layout=True
+    constrained_layout=True,
 )
 
 # left panel (no legend)
@@ -419,10 +453,10 @@ sc.pl.umap(
     adata_crohns,
     color="curated",
     frameon=True,
-    legend_loc=None,       
+    legend_loc=None,
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 # right panel (with legend)
@@ -430,19 +464,19 @@ sc.pl.umap(
     adata_normal,
     color="curated",
     frameon=True,
-    legend_loc="right margin",     
+    legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 for ax in axes:
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
-    ax.set_aspect("equal")  
+    ax.set_aspect("equal")
 
 fig.savefig(
-    os.path.join(PATH, f"joint_UMAP_{REDUCT_NAME}_curated.pdf"),
+    PATH / f"joint_UMAP_{REDUCT_NAME}_curated.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -466,9 +500,11 @@ xlim = (xy[:, 0].min() - pad, xy[:, 0].max() + pad)
 ylim = (xy[:, 1].min() - pad, xy[:, 1].max() + pad)
 
 fig, axes = plt.subplots(
-    1, 2, figsize=(12, 6),
+    1,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"width_ratios": [1, 1]},
-    constrained_layout=True
+    constrained_layout=True,
 )
 
 # left panel (no legend)
@@ -476,13 +512,13 @@ sc.pl.umap(
     adata_crohns,
     color="curated",
     frameon=True,
-    legend_loc="on data",  
+    legend_loc="on data",
     legend_fontsize="small",
-    legend_fontweight="normal", 
-    legend_fontoutline=2,        
+    legend_fontweight="normal",
+    legend_fontoutline=2,
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 # right panel (with legend)
@@ -490,39 +526,38 @@ sc.pl.umap(
     adata_normal,
     color="curated",
     frameon=True,
-    legend_loc="on data", 
+    legend_loc="on data",
     legend_fontsize="small",
-    legend_fontweight="normal", 
-    legend_fontoutline=2,        
+    legend_fontweight="normal",
+    legend_fontoutline=2,
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 for ax in axes:
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
-    ax.set_aspect("equal")  
+    ax.set_aspect("equal")
 
 fig.savefig(
-    os.path.join(PATH, f"joint_UMAP_{REDUCT_NAME}_curated_annotated.pdf"),
+    PATH / f"joint_UMAP_{REDUCT_NAME}_curated_annotated.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
 )
 
-# Marginal UMAP on Integrated_05 
-def compute_umap(
-    adata_input, 
-    use_rep=REDUCT_NAME, 
-    min_dist=0.3, 
-    random_state=0
-):
+
+# Marginal UMAP on Integrated_05
+def compute_umap(adata_input, use_rep=REDUCT_NAME, min_dist=0.3, random_state=0):
+    """Compute UMAP embedding for given AnnData object."""
     sc.pp.neighbors(adata_input, use_rep=use_rep)
     sc.tl.umap(adata_input, min_dist=min_dist, random_state=random_state)
 
+
 compute_umap(adata_crohns)
 compute_umap(adata_normal)
+
 
 def set_centered_limits(ax, xy, pad=0.5):
     """Center axis limits around data with equal aspect ratio."""
@@ -554,25 +589,24 @@ sc.pl.umap(
     legend_loc="right margin",
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 sc.pl.umap(
     adata_normal,
     color="sample_id",
     frameon=True,
-
     legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 set_centered_limits(axes[0], adata_crohns.obsm["X_umap"])
 set_centered_limits(axes[1], adata_normal.obsm["X_umap"])
 
 fig.savefig(
-    os.path.join(PATH, f"marginal_UMAP_{REDUCT_NAME}_sample_id.pdf"),
+    PATH / f"marginal_UMAP_{REDUCT_NAME}_sample_id.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -587,9 +621,11 @@ cat_palette = {c: cmap(i) for i, c in enumerate(cats)}
 adata.uns["category_colors"] = [cat_palette[c] for c in cats]
 
 fig, axes = plt.subplots(
-    1, 2, figsize=(12, 6),
+    1,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"width_ratios": [1, 1]},
-    constrained_layout=True
+    constrained_layout=True,
 )
 
 # left panel (no legend)
@@ -597,10 +633,10 @@ sc.pl.umap(
     adata_crohns,
     color="category",
     frameon=True,
-    legend_loc=None,           
+    legend_loc=None,
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 # right panel (with legend)
@@ -608,17 +644,17 @@ sc.pl.umap(
     adata_normal,
     color="category",
     frameon=True,
-    legend_loc="right margin", 
+    legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 set_centered_limits(axes[0], adata_crohns.obsm["X_umap"])
 set_centered_limits(axes[1], adata_normal.obsm["X_umap"])
 
 fig.savefig(
-    os.path.join(PATH, f"marginal_UMAP_{REDUCT_NAME}_category.pdf"),
+    PATH / f"marginal_UMAP_{REDUCT_NAME}_category.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -634,9 +670,11 @@ cat_palette = {c: cmap(i) for i, c in enumerate(cats)}
 adata.uns["curated_colors"] = [cat_palette[c] for c in cats]
 
 fig, axes = plt.subplots(
-    1, 2, figsize=(12, 6),
+    1,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"width_ratios": [1, 1]},
-    constrained_layout=True
+    constrained_layout=True,
 )
 
 # left panel (no legend)
@@ -644,10 +682,10 @@ sc.pl.umap(
     adata_crohns,
     color="curated",
     frameon=True,
-    legend_loc=None,           
+    legend_loc=None,
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 # right panel (with legend)
@@ -655,17 +693,17 @@ sc.pl.umap(
     adata_normal,
     color="curated",
     frameon=True,
-    legend_loc="right margin", 
+    legend_loc="right margin",
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 set_centered_limits(axes[0], adata_crohns.obsm["X_umap"])
 set_centered_limits(axes[1], adata_normal.obsm["X_umap"])
 
 fig.savefig(
-    os.path.join(PATH, f"marginal_UMAP_{REDUCT_NAME}_curated.pdf"),
+    PATH / f"marginal_UMAP_{REDUCT_NAME}_curated.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -680,9 +718,11 @@ cat_palette = {c: cmap[i] for i, c in enumerate(cats)}
 adata.uns["curated_colors"] = [cat_palette[c] for c in cats]
 
 fig, axes = plt.subplots(
-    1, 2, figsize=(12, 6),
+    1,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"width_ratios": [1, 1]},
-    constrained_layout=True
+    constrained_layout=True,
 )
 
 # left panel (no legend)
@@ -690,13 +730,13 @@ sc.pl.umap(
     adata_crohns,
     color="curated",
     frameon=True,
-    legend_loc="on data",  
+    legend_loc="on data",
     legend_fontsize="small",
-    legend_fontweight="normal", 
-    legend_fontoutline=2,        
+    legend_fontweight="normal",
+    legend_fontoutline=2,
     title="Crohn's Disease",
     ax=axes[0],
-    show=False
+    show=False,
 )
 
 # right panel (with legend)
@@ -704,20 +744,20 @@ sc.pl.umap(
     adata_normal,
     color="curated",
     frameon=True,
-    legend_loc="on data", 
+    legend_loc="on data",
     legend_fontsize="small",
-    legend_fontweight="normal", 
-    legend_fontoutline=2,        
+    legend_fontweight="normal",
+    legend_fontoutline=2,
     title="Normal",
     ax=axes[1],
-    show=False
+    show=False,
 )
 
 set_centered_limits(axes[0], adata_crohns.obsm["X_umap"])
 set_centered_limits(axes[1], adata_normal.obsm["X_umap"])
 
 fig.savefig(
-    os.path.join(PATH, f"marginal_UMAP_{REDUCT_NAME}_curated_annotated.pdf"),
+    PATH / f"marginal_UMAP_{REDUCT_NAME}_curated_annotated.pdf",
     format="pdf",
     bbox_inches="tight",
     pad_inches=0.2,
@@ -728,10 +768,12 @@ df = adata.obs[["sample_id", "category"]].copy()
 
 # proportions per sample
 prop = (
-    df.groupby(["sample_id", "category"], observed=True).size()
-        .groupby(level=0, observed=True).apply(lambda s: s / s.sum())
-        .unstack(fill_value=0)    # samples x celltypes
-        .sort_index()
+    df.groupby(["sample_id", "category"], observed=True)
+    .size()
+    .groupby(level=0, observed=True)
+    .apply(lambda s: s / s.sum())
+    .pivot_table(fill_value=0)  # samples x celltypes
+    .sort_index()
 )
 
 if isinstance(prop.index, pd.MultiIndex):
@@ -745,33 +787,43 @@ cmap = plt.get_cmap("tab10", len(cts_alpha))
 color_by_ct = {ct: cmap(i) for i, ct in enumerate(cts_alpha)}
 
 # split panels
-group_A = ["C_03", "C_08", "C_13"]
-group_B = ["N_04", "N_06", "N_07", "N_12"]
-subA = prop.reindex([s for s in group_A if s in prop.index]).dropna(how="all")
-subB = prop.reindex([s for s in group_B if s in prop.index]).dropna(how="all")
+crohns_subset = prop.reindex([s for s in crohns_samples if s in prop.index]).dropna(
+    how="all",
+)
+normal_subset = prop.reindex([s for s in normal_samples if s in prop.index]).dropna(
+    how="all",
+)
 
-width_ratios = [max(1, subA.shape[0]), max(1, subB.shape[0])]
-fig_w = max(10, 0.6 * (subA.shape[0] + subB.shape[0]) + 2)
-fig, axes = plt.subplots(1, 2, figsize=(fig_w, 5), sharey=True,
-                            gridspec_kw={"width_ratios": width_ratios})
+width_ratios = [max(1, crohns_subset.shape[0]), max(1, normal_subset.shape[0])]
+fig_w = max(10, 0.6 * (crohns_subset.shape[0] + normal_subset.shape[0]) + 2)
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(fig_w, 5),
+    sharey=True,
+    gridspec_kw={"width_ratios": width_ratios},
+)
 
-for ax, sub, title in [(axes[0], subA, "Crohn's Disease"), (axes[1], subB, "Normal")]:
+for ax, sub, title in [
+    (axes[0], crohns_subset, "Crohn's Disease"),
+    (axes[1], normal_subset, "Normal"),
+]:
     x = np.arange(sub.shape[0])
     bottom = np.zeros(sub.shape[0])
 
-    # stacked bars in abundance order 
+    # stacked bars in abundance order
     for ct in prop.columns[::-1]:
-        vals = sub[ct].values if ct in sub.columns else np.zeros(sub.shape[0])
+        vals = sub[ct].to_numpy() if ct in sub.columns else np.zeros(sub.shape[0])
         ax.bar(
-            x, 
-            vals, 
+            x,
+            vals,
             bottom=bottom,
             alpha=0.75,
-            label=ct, 
-            color=color_by_ct[ct], 
-            edgecolor="dimgray",      
-            linewidth=1,    
-            zorder=2              
+            label=ct,
+            color=color_by_ct[ct],
+            edgecolor="dimgray",
+            linewidth=1,
+            zorder=2,
         )
         bottom += vals
 
@@ -782,7 +834,14 @@ for ax, sub, title in [(axes[0], subA, "Crohn's Disease"), (axes[1], subB, "Norm
 
     ax.set_ylim(0, 1)
     ax.yaxis.set_major_locator(mtick.MultipleLocator(0.25))
-    ax.grid(axis="y", which="major", color="black", linestyle="-", linewidth=0.75, zorder=3)
+    ax.grid(
+        axis="y",
+        which="major",
+        color="black",
+        linestyle="-",
+        linewidth=0.75,
+        zorder=3,
+    )
     ax.set_axisbelow(False)  # grid above bars
 
     ax.spines["left"].set_visible(False)
@@ -793,13 +852,19 @@ for ax, sub, title in [(axes[0], subA, "Crohn's Disease"), (axes[1], subB, "Norm
 handles, labels_ = axes[0].get_legend_handles_labels()
 order = np.argsort(labels_)
 handles = [handles[i] for i in order]
-labels_  = [labels_[i] for i in order]
+labels_ = [labels_[i] for i in order]
 ncol = min(4, max(1, len(labels_) // 10 + 1))
-fig.legend(handles, labels_, bbox_to_anchor=(1.02, 0.5), loc="center left",
-            frameon=False, ncol=ncol)
+fig.legend(
+    handles,
+    labels_,
+    bbox_to_anchor=(1.02, 0.5),
+    loc="center left",
+    frameon=False,
+    ncol=ncol,
+)
 
 fig.tight_layout()
-out_pdf = os.path.join(PATH, "stacked_bar_category.pdf")
+out_pdf = PATH / "stacked_bar_category.pdf"
 fig.savefig(out_pdf, bbox_inches="tight")
 
 
@@ -807,10 +872,12 @@ df = adata.obs[["sample_id", "curated"]].copy()
 
 # proportions per sample
 prop = (
-    df.groupby(["sample_id", "curated"], observed=True).size()
-        .groupby(level=0, observed=True).apply(lambda s: s / s.sum())
-        .unstack(fill_value=0)    # samples x celltypes
-        .sort_index()
+    df.groupby(["sample_id", "curated"], observed=True)
+    .size()
+    .groupby(level=0, observed=True)
+    .apply(lambda s: s / s.sum())
+    .pivot_table(fill_value=0)  # samples x celltypes
+    .sort_index()
 )
 
 if isinstance(prop.index, pd.MultiIndex):
@@ -824,32 +891,42 @@ cmap = sns.color_palette("hls", len(cts_alpha))
 color_by_ct = {ct: cmap[i] for i, ct in enumerate(cts_alpha)}
 
 # split panels
-group_A = ["C_03", "C_08", "C_13"]
-group_B = ["N_04", "N_06", "N_07", "N_12"]
-subA = prop.reindex([s for s in group_A if s in prop.index]).dropna(how="all")
-subB = prop.reindex([s for s in group_B if s in prop.index]).dropna(how="all")
+crohns_subset = prop.reindex([s for s in crohns_samples if s in prop.index]).dropna(
+    how="all",
+)
+normal_subset = prop.reindex([s for s in normal_samples if s in prop.index]).dropna(
+    how="all",
+)
 
-width_ratios = [max(1, subA.shape[0]), max(1, subB.shape[0])]
-fig_w = max(10, 0.6 * (subA.shape[0] + subB.shape[0]) + 2)
-fig, axes = plt.subplots(1, 2, figsize=(fig_w, 5), sharey=True,
-                            gridspec_kw={"width_ratios": width_ratios})
+width_ratios = [max(1, crohns_subset.shape[0]), max(1, normal_subset.shape[0])]
+fig_w = max(10, 0.6 * (crohns_subset.shape[0] + normal_subset.shape[0]) + 2)
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(fig_w, 5),
+    sharey=True,
+    gridspec_kw={"width_ratios": width_ratios},
+)
 
-for ax, sub, title in [(axes[0], subA, "Crohn's Disease"), (axes[1], subB, "Normal")]:
+for ax, sub, title in [
+    (axes[0], crohns_subset, "Crohn's Disease"),
+    (axes[1], normal_subset, "Normal"),
+]:
     x = np.arange(sub.shape[0])
     bottom = np.zeros(sub.shape[0])
 
-    # stacked bars in abundance order 
+    # stacked bars in abundance order
     for ct in prop.columns[::-1]:
-        vals = sub[ct].values if ct in sub.columns else np.zeros(sub.shape[0])
+        vals = sub[ct].to_numpy() if ct in sub.columns else np.zeros(sub.shape[0])
         ax.bar(
-            x, 
-            vals, 
-            bottom=bottom, 
-            label=ct, 
-            color=color_by_ct[ct], 
-            edgecolor="dimgray",      
-            linewidth=0.75,    
-            zorder=2              
+            x,
+            vals,
+            bottom=bottom,
+            label=ct,
+            color=color_by_ct[ct],
+            edgecolor="dimgray",
+            linewidth=0.75,
+            zorder=2,
         )
         bottom += vals
 
@@ -860,7 +937,14 @@ for ax, sub, title in [(axes[0], subA, "Crohn's Disease"), (axes[1], subB, "Norm
 
     ax.set_ylim(0, 1)
     ax.yaxis.set_major_locator(mtick.MultipleLocator(0.25))
-    ax.grid(axis="y", which="major", color="black", linestyle="-", linewidth=0.75, zorder=3)
+    ax.grid(
+        axis="y",
+        which="major",
+        color="black",
+        linestyle="-",
+        linewidth=0.75,
+        zorder=3,
+    )
     ax.set_axisbelow(False)  # grid above bars
 
     ax.spines["left"].set_visible(False)
@@ -871,11 +955,17 @@ for ax, sub, title in [(axes[0], subA, "Crohn's Disease"), (axes[1], subB, "Norm
 handles, labels_ = axes[0].get_legend_handles_labels()
 order = np.argsort(labels_)
 handles = [handles[i] for i in order]
-labels_  = [labels_[i] for i in order]
+labels_ = [labels_[i] for i in order]
 ncol = min(4, max(1, len(labels_) // 10 + 1))
-fig.legend(handles, labels_, bbox_to_anchor=(1.02, 0.5), loc="center left",
-            frameon=False, ncol=ncol)
+fig.legend(
+    handles,
+    labels_,
+    bbox_to_anchor=(1.02, 0.5),
+    loc="center left",
+    frameon=False,
+    ncol=ncol,
+)
 
 fig.tight_layout()
-out_pdf = os.path.join(PATH, "stacked_bar_curated.pdf")
-fig.savefig(out_pdf, bbox_inches="tight")   
+out_pdf = PATH / "stacked_bar_curated.pdf"
+fig.savefig(out_pdf, bbox_inches="tight")
