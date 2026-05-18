@@ -1,58 +1,53 @@
-import os
+#!/usr/bin/env python3
+
+"""Scanpy clustering and UMAP visualization for sysVI latent space."""
+
+from pathlib import Path
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 import scanpy as sc
 from matplotlib import pyplot as plt
-from matplotlib import ticker as mtick
 
 pd.options.mode.string_storage = "python"
 ad.settings.allow_write_nullable_strings = True
 
-PATH = "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning/old"
-
-prefix = "a848a9e4"
-ADATA_IN = os.path.join(PATH, f"{prefix}_sysvi.h5ad")
-ADATA_OUT = os.path.join(PATH, f"{prefix}_gca_sysvi_umaps.h5ad")
-
-adata = sc.read_h5ad(ADATA_IN)
-
-REDUCT_KEY = "X_embeddings"
-
-sid = adata.obs["sample_id"].astype(str)
-
-CROHNS = sorted(sid[sid.str.contains("crohns", case=False, na=False)].unique().tolist())
-NORMAL = sorted(sid[sid.str.contains("normal", case=False, na=False)].unique().tolist())
-
-UMAP_MIN_DIST = 0.3
-N_NEIGHBORS = 15
-
-
-if REDUCT_KEY not in adata.obsm:
-    alt = "X_embeddings"
-    if alt in adata.obsm:
-        REDUCT_KEY = alt
-    else:
-        raise KeyError(
-            f"Missing latent representation: {REDUCT_KEY} (and {alt}) in adata.obsm"
-        )
+tuning_dir = Path(
+    "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/sysvi_tuning/",
+)
 
 
 def compute_umap(
-    a, use_rep, neighbors_key, umap_key, n_neighbors=N_NEIGHBORS, min_dist=UMAP_MIN_DIST
-):
+    adata: ad.AnnData,
+    use_rep: str,
+    neighbors_key: str,
+    umap_key: str,
+    n_neighbors: int = 15,
+    min_dist: float = 0.3,
+) -> ad.AnnData:
+    """Compute UMAP embedding."""
     sc.pp.neighbors(
-        a, use_rep=use_rep, n_neighbors=n_neighbors, key_added=neighbors_key
+        adata,
+        use_rep=use_rep,
+        n_neighbors=n_neighbors,
+        key_added=neighbors_key,
     )
-    sc.tl.umap(a, neighbors_key=neighbors_key, min_dist=min_dist)
-    a.obsm[umap_key] = a.obsm["X_umap"].copy()
-    return a
+    sc.tl.umap(adata, neighbors_key=neighbors_key, min_dist=min_dist)
+    adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
+    return adata
 
 
-def save_umap_pdf(a, umap_key, color, out_pdf, ncols=None):
+def save_umap_pdf(
+    adata: ad.AnnData,
+    umap_key: str,
+    color: str,
+    out_pdf: Path,
+    ncols: int,
+) -> None:
+    """Save UMAP plot as PDF."""
     fig = sc.pl.embedding(
-        a,
+        adata,
         basis=umap_key,
         color=color,
         ncols=ncols,
@@ -65,180 +60,93 @@ def save_umap_pdf(a, umap_key, color, out_pdf, ncols=None):
     plt.close(fig)
 
 
-adata = compute_umap(
-    adata,
-    use_rep=REDUCT_KEY,
-    neighbors_key="neighbors_full",
-    umap_key="X_umap_full",
-)
-
-# save_umap_pdf(
-#     adata,
-#     umap_key="X_umap_full",
-#     color=LABEL,
-#     out_pdf=os.path.join(PATH, f"UMAP_{REDUCT_KEY}_celltypes.pdf"),
-# )
-
-save_umap_pdf(
-    adata,
-    umap_key="X_umap_full",
-    color="sample_id",
-    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_{REDUCT_KEY}_metadata.pdf"),
-)
-
-save_umap_pdf(
-    adata,
-    umap_key="X_umap_full",
-    color="platform",
-    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_{REDUCT_KEY}_platform.pdf"),
-)
-
-adata_c = adata[adata.obs["sample_id"].isin(CROHNS)].copy()
-adata_c = compute_umap(
-    adata_c,
-    use_rep=REDUCT_KEY,
-    neighbors_key="neighbors_crohns",
-    umap_key="X_umap_crohns",
-)
-
-# save_umap_pdf(
-#     adata_c,
-#     umap_key="X_umap_crohns",
-#     color=LABEL,
-#     out_pdf=os.path.join(PATH, f"UMAP_Crohns_{REDUCT_KEY}_celltypes.pdf"),
-# )
-
-save_umap_pdf(
-    adata_c,
-    umap_key="X_umap_crohns",
-    color="sample_id",
-    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_Crohns_{REDUCT_KEY}_metadata.pdf"),
-)
-
-adata_n = adata[adata.obs["sample_id"].isin(NORMAL)].copy()
-adata_n = compute_umap(
-    adata_n,
-    use_rep=REDUCT_KEY,
-    neighbors_key="neighbors_normal",
-    umap_key="X_umap_normal",
-)
-
-# save_umap_pdf(
-#     adata_n,
-#     umap_key="X_umap_normal",
-#     color=LABEL,
-#     out_pdf=os.path.join(PATH, f"UMAP_Normal_{REDUCT_KEY}_celltypes.pdf"),
-# )
-
-save_umap_pdf(
-    adata_n,
-    umap_key="X_umap_normal",
-    color="sample_id",
-    out_pdf=os.path.join(PATH, f"{prefix}_UMAP_Normal_{REDUCT_KEY}_metadata.pdf"),
-)
-
-adata.obsm["X_umap_crohns"] = np.full((adata.n_obs, 2), np.nan, dtype=np.float32)
-adata.obsm["X_umap_normal"] = np.full((adata.n_obs, 2), np.nan, dtype=np.float32)
-
-crohns_mask = adata.obs["sample_id"].isin(CROHNS).values
-normal_mask = adata.obs["sample_id"].isin(NORMAL).values
-
-adata.obsm["X_umap_crohns"][crohns_mask, :] = adata_c.obsm["X_umap_crohns"].astype(
-    np.float32
-)
-adata.obsm["X_umap_normal"][normal_mask, :] = adata_n.obsm["X_umap_normal"].astype(
-    np.float32
-)
-
-# if "sample_id" or LABEL not in adata.obs:
-#     raise KeyError(f"Missing required obs columns: 'sample_id' and '{LABEL}'")
-
-
-df = adata.obs[["sample_id"]].copy()
-
-prop = (
-    df.groupby(["sample_id"], observed=True)
-    .size()
-    .groupby(level=0, observed=True)
-    .apply(lambda s: s / s.sum())
-    .unstack(fill_value=0)
-    .sort_index()
-)
-
-if isinstance(prop.index, pd.MultiIndex):
-    prop = prop.copy()
-    prop.index = prop.index.get_level_values(0)
-
-prop.index = prop.index.astype(str)
-
-cts_alpha = sorted(prop.columns)
-palette_name = "tab20" if len(cts_alpha) <= 20 else "gist_ncar"
-cmap = plt.get_cmap(palette_name, len(cts_alpha))
-color_by_ct = {ct: cmap(i) for i, ct in enumerate(cts_alpha)}
-
-subA = prop.reindex([s for s in CROHNS if s in prop.index]).dropna(how="all")
-subB = prop.reindex([s for s in NORMAL if s in prop.index]).dropna(how="all")
-
-present_cols = sorted(
-    set(subA.columns[subA.sum(axis=0) > 0]).union(
-        set(subB.columns[subB.sum(axis=0) > 0])
+def run_umap_and_save_pdfs(
+    adata: ad.AnnData,
+    prefix: str,
+    sample_set: str,
+) -> ad.AnnData:
+    """Run UMAP coloured by diagnosis, sample_id, platform, and predictions."""
+    adata = compute_umap(
+        adata,
+        use_rep="X_embeddings",
+        neighbors_key=f"neighbors_{sample_set}",
+        umap_key=f"X_umap_{sample_set}",
     )
-)
-subA = subA.reindex(columns=present_cols)
-subB = subB.reindex(columns=present_cols)
 
-width_ratios = [max(1, subA.shape[0]), max(1, subB.shape[0])]
-fig_w = max(10, 0.6 * (subA.shape[0] + subB.shape[0]) + 2)
+    for color, out_pdf in [
+        (
+            "diagnosis",
+            tuning_dir / f"{prefix}_UMAP_{sample_set}_X_embeddings_diagnosis.pdf",
+        ),
+        (
+            "sample_id",
+            tuning_dir / f"{prefix}_UMAP_{sample_set}_X_embeddings_metadata.pdf",
+        ),
+        (
+            "platform",
+            tuning_dir / f"{prefix}_UMAP_{sample_set}_X_embeddings_platform.pdf",
+        ),
+        (
+            "label_spreading_prediction_filtered",
+            tuning_dir / f"{prefix}_UMAP_{sample_set}_X_embeddings_celltypes.pdf",
+        ),
+    ]:
+        save_umap_pdf(
+            adata,
+            umap_key=f"X_umap_{sample_set}",
+            color=color,
+            out_pdf=out_pdf,
+            ncols=1,
+        )
 
-fig, axes = plt.subplots(
-    1, 2, figsize=(fig_w, 5), sharey=True, gridspec_kw={"width_ratios": width_ratios}
-)
+    return adata
 
-for ax, sub, title in [
-    (axes[0], subA, "Crohn's Disease Terminal Ileum"),
-    (axes[1], subB, "Normal Terminal Ileum"),
-]:
-    x = np.arange(sub.shape[0])
-    bottom = np.zeros(sub.shape[0])
 
-    for ct in present_cols:
-        vals = sub[ct].values if ct in sub.columns else np.zeros(sub.shape[0])
-        ax.bar(x, vals, bottom=bottom, label=ct, color=color_by_ct[ct], linewidth=0)
-        bottom += vals
+def main() -> None:
+    """Run UMAP and save PDFs."""
+    # h5ad_files = list(tuning_dir.glob("*.h5ad"))
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(sub.index.tolist(), rotation=0, ha="center")
-    ax.set_xlabel("Sample")
-    ax.set_title(title)
+    # prefixes = [p.name[:8] for p in h5ad_files]
 
-    ax.set_ylim(0, 1)
-    ax.yaxis.set_major_locator(mtick.MultipleLocator(0.25))
-    ax.grid(axis="y", which="major", linestyle="-", linewidth=0.8, zorder=0)
-    ax.set_axisbelow(True)
+    for prefix in ["c561826c_sysvi_label_spreading"]:
+        adata_file = tuning_dir / "c561826c_sysvi_label_spreading_alpha_0.2_n_5.h5ad"
 
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+        adata = sc.read_h5ad(adata_file)
 
-handles, labels_ = axes[0].get_legend_handles_labels()
-order = np.argsort(labels_)
-handles = [handles[i] for i in order]
-labels_ = [labels_[i] for i in order]
-ncol = min(4, max(1, len(labels_) // 10 + 1))
+        # add diagnosis column based on sample_id
+        adata.obs["diagnosis"] = np.where(
+            adata.obs["sample_id"].str.contains("crohns", case=False, na=False),
+            "Crohn's disease",
+            "Normal",
+        )
+        # remove low confidence label transfer predictions
+        adata = adata[adata.obs["label_spreading_prediction_filtered"] != "Unknown"]
 
-fig.legend(
-    handles,
-    labels_,
-    bbox_to_anchor=(1.02, 0.5),
-    loc="center left",
-    frameon=False,
-    ncol=ncol,
-)
+        # subset to Crohn's disease and normal samples for marginal UMAPs
+        sample_id = adata.obs["sample_id"].astype(str)
 
-fig.tight_layout()
-fig.savefig(
-    os.path.join(PATH, "stacked_bar_celltypes_by_sample_panels.pdf"),
-    bbox_inches="tight",
-)
-plt.close(fig)
+        crohns_samples = sorted(
+            sample_id[sample_id.str.contains("crohns", case=False, na=False)]
+            .unique()
+            .tolist(),
+        )
+        adata_c = adata[adata.obs["sample_id"].isin(crohns_samples)].copy()
 
-adata.write_h5ad(ADATA_OUT)
+        # Subset to normal and compute marginal UMAPs
+        normal_samples = sorted(
+            sample_id[sample_id.str.contains("normal", case=False, na=False)]
+            .unique()
+            .tolist(),
+        )
+        adata_n = adata[adata.obs["sample_id"].isin(normal_samples)].copy()
+
+        # compute UMAPs and save PDFs
+        adata = run_umap_and_save_pdfs(adata, prefix, sample_set="full")
+        adata_c = run_umap_and_save_pdfs(adata_c, prefix, sample_set="crohns")
+        adata_n = run_umap_and_save_pdfs(adata_n, prefix, sample_set="normal")
+
+        adata.write_h5ad(tuning_dir / f"{prefix}_UMAP_X_embeddings_umaps.h5ad")
+
+
+if __name__ == "__main__":
+    main()
