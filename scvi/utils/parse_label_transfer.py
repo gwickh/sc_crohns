@@ -189,7 +189,7 @@ def train_parse_label_transfer(
     output_confidence_key: str = "label_spreading_confidence",
     output_unknown_key: str = "label_spreading_prediction_filtered",
 ) -> pd.DataFrame:
-    """Run label spreading separately within each diagnosis and concatenate summaries."""
+    """Run label spreading separately within each diagnosis and concatenate."""
     if embedding_key not in adata.obsm:
         msg = f"{embedding_key!r} not found in adata.obsm."
 
@@ -204,11 +204,12 @@ def train_parse_label_transfer(
 
         raise KeyError(msg)
 
-    X_all = np.asarray(adata.obsm[embedding_key])
+    embeddings = np.asarray(adata.obsm[embedding_key])
 
-    if X_all.shape[0] != adata.n_obs:
-        msg = f"Embedding has {X_all.shape[0]} rows but adata has {adata.n_obs} cells."
-
+    if embeddings.shape[0] != adata.n_obs:
+        msg = f"""
+        Embedding has {embeddings.shape[0]} rows but adata has {adata.n_obs} cells.
+        """
         raise ValueError(msg)
 
     # Initialise output columns for the full object
@@ -255,7 +256,7 @@ def train_parse_label_transfer(
         subset_mask = ref_mask | query_mask
         subset_indices = np.where(subset_mask.to_numpy())[0]
         subset_obs_names = adata.obs_names[subset_indices]
-        X = X_all[subset_indices]
+        X = embeddings[subset_indices]
 
         # Encode labels for reference cells in this diagnosis
         le = LabelEncoder()
@@ -284,6 +285,7 @@ def train_parse_label_transfer(
         # Write predictions back to full adata
         adata.obs.loc[subset_obs_names, output_label_key] = pred_labels
         adata.obs.loc[subset_obs_names, output_confidence_key] = confidence
+
         filtered = pd.Series(pred_labels, index=subset_obs_names, dtype="object")
         query_subset_mask = adata.obs.loc[subset_obs_names, platform_key].eq(
             query_platform,
@@ -364,7 +366,8 @@ def train_parse_label_transfer(
         summary_dfs.append(summary)
 
     if not summary_dfs:
-        raise ValueError("No diagnosis-specific label spreading runs were completed.")
+        msg = "No diagnoses had both reference and Parse cells for label spreading."
+        raise ValueError(msg)
 
     combined_summary = pd.concat(summary_dfs, ignore_index=True)
 
@@ -378,6 +381,16 @@ def train_parse_label_transfer(
         adata.obs[output_unknown_key].fillna("Unknown").astype("category")
     )
 
+    print("\n10X cell type counts:")
+    print(adata.obs.loc[ref_mask, output_unknown_key].value_counts(dropna=False))
+    print("\nParse predicted cell type counts:")
+    print(adata.obs.loc[query_mask, output_unknown_key].value_counts(dropna=False))
+
+    adata.write_h5ad(
+        TUNING_DIR
+        / f"c561826c_sysvi_label_spreading_alpha_{alpha}_n_{n_neighbors}.h5ad",
+    )
+
     return combined_summary
 
 
@@ -386,10 +399,7 @@ def compute_js_divergence(
     exclude_labels: tuple[str, ...] = ("Unknown",),
     pseudocount: float = 0.0,
 ) -> float:
-    """
-    Compute Jensen-Shannon distance between 10X and Parse cell-type counts.
-    """
-
+    """Compute Jensen-Shannon distance between 10X and Parse cell-type counts."""
     summary["unique_cell_type"] = summary["diagnosis"] + "_" + summary["cell_type"]
     counts_10x = summary.set_index("unique_cell_type")["n_10X"]
     counts_parse = summary.set_index("unique_cell_type")["n_Parse_predicted"]
@@ -433,8 +443,8 @@ def main() -> None:
     )
 
     param_grid = {
-        "n_neighbors": [5, 10, 15, 20],
-        "alpha": [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        "n_neighbors": [5],
+        "alpha": [0.2],
     }
 
     preprocess_adata(adata)
@@ -446,7 +456,7 @@ def main() -> None:
             summary = train_parse_label_transfer(
                 adata,
                 kernel="knn",
-                n_neighbors=n_neighbors,
+                n_neighbors=5,
                 alpha=alpha,
             )
 
