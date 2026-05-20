@@ -5,10 +5,10 @@
 #SBATCH --output=4_scvi_%j.SLURM.stdout
 #SBATCH --error=4_scvi_%j.SLURM.stderr
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=400GB
+#SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-short
 
 # Usage: sbatch sc_crohns/scvi/4_scanvi_slurm.sh sc_crohns/scvi/ project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/
 
@@ -26,10 +26,7 @@ scripts=(
     # "4b_label_transfer.py"
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
-    # "4f_curated_celltype_clustering.py"
-    sysVI_hyperparameter_search_utils.py
-    # sysVI_compute_metrics.py
-    # parse_label_transfer.py
+    "4f_curated_celltype_clustering.py"
 )
 
 for script in "${scripts[@]}"; do
