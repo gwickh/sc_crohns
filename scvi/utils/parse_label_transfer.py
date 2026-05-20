@@ -218,6 +218,7 @@ def train_parse_label_transfer(
     adata.obs[output_unknown_key] = pd.Series(index=adata.obs_names, dtype="object")
 
     summary_dfs = []
+    prob_df = []
 
     diagnosis_values = sorted(adata.obs[diagnosis_key].dropna().astype(str).unique())
 
@@ -282,11 +283,14 @@ def train_parse_label_transfer(
         pred_labels = le.inverse_transform(pred_encoded)
         confidence = model.label_distributions_.max(axis=1)
 
-        prob_df = pd.DataFrame(
+        # write confidence scores to dataframe
+        diagnosis_prob_df = pd.DataFrame(
             model.label_distributions_,
-            index=adata.obs_names,
+            index=subset_obs_names,
             columns=le.classes_,
         )
+
+        prob_df.append(diagnosis_prob_df)
 
         # Write predictions back to full adata
         adata.obs.loc[subset_obs_names, output_label_key] = pred_labels
@@ -370,6 +374,8 @@ def train_parse_label_transfer(
         summary["alpha"] = alpha
         summary["confidence_threshold"] = confidence_threshold
         summary_dfs.append(summary)
+
+    prob_df = pd.concat(prob_df, axis=0, ignore_index=False)
 
     if not summary_dfs:
         msg = "No diagnoses had both reference and Parse cells for label spreading."

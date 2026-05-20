@@ -26,7 +26,8 @@ scripts=(
     # "4b_label_transfer.py"
     # "4d_scanpy_clustering.py"
     # "4e_celltype_similarity_matrix.py"
-    "4f_curated_celltype_clustering.py"
+    # "4f_curated_celltype_clustering.py"
+    parse_label_transfer.py
 )
 
 for script in "${scripts[@]}"; do
