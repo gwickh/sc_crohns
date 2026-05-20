@@ -282,6 +282,12 @@ def train_parse_label_transfer(
         pred_labels = le.inverse_transform(pred_encoded)
         confidence = model.label_distributions_.max(axis=1)
 
+        prob_df = pd.DataFrame(
+            model.label_distributions_,
+            index=adata.obs_names,
+            columns=le.classes_,
+        )
+
         # Write predictions back to full adata
         adata.obs.loc[subset_obs_names, output_label_key] = pred_labels
         adata.obs.loc[subset_obs_names, output_confidence_key] = confidence
@@ -391,7 +397,7 @@ def train_parse_label_transfer(
         / f"c561826c_sysvi_label_spreading_alpha_{alpha}_n_{n_neighbors}.h5ad",
     )
 
-    return combined_summary
+    return prob_df, combined_summary
 
 
 def compute_js_divergence(
@@ -442,6 +448,11 @@ def main() -> None:
         "Normal",
     )
 
+    # param_grid = {
+    #     "n_neighbors": [np.linspace(5, 30, num=5)],
+    #     "alpha": [np.linspace(0.1, 0.9, num=9)],
+    # }
+
     param_grid = {
         "n_neighbors": [5],
         "alpha": [0.2],
@@ -453,11 +464,16 @@ def main() -> None:
 
     for n_neighbors in param_grid["n_neighbors"]:
         for alpha in param_grid["alpha"]:
-            summary = train_parse_label_transfer(
+            prob_df, summary = train_parse_label_transfer(
                 adata,
                 kernel="knn",
                 n_neighbors=5,
-                alpha=alpha,
+                alpha=0.2,
+            )
+
+            prob_df.to_csv(
+                TUNING_DIR
+                / f"label_spreading_knn_alpha_{alpha}_n_{n_neighbors}_probabilities.csv",
             )
 
             summary.to_csv(
