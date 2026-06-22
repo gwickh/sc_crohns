@@ -4,8 +4,8 @@
 #SBATCH --job-name=scvi_cluster
 #SBATCH --output=4_scvi_%j.SLURM.stdout
 #SBATCH --error=4_scvi_%j.SLURM.stderr
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=256G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=128G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-short
@@ -24,10 +24,11 @@ conda activate python_scripts
 scripts=(
     # "4a_generate_latent_space.py"
     # "4b_label_transfer.py"
-    # "4d_scanpy_clustering.py"
+    # "4c_scanpy_clustering.py"
+    # "4d_celltype_cluster_purity.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
-    parse_label_transfer.py
+    "4g_celltype_markers.py"
 )
 
 for script in "${scripts[@]}"; do
