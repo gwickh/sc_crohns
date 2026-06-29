@@ -256,19 +256,6 @@ def main() -> None:
     """Compute Z-scored gene expression and plot top N marker genes per cell type."""
     # User settings
     label_key = "label_spreading_prediction"
-    confidence_key = "label_spreading_confidence"
-
-    high_conf_threshold = 0.8
-    remove_unknown = True
-
-    top_n_markers = 5
-    min_cells_per_type = 20
-
-    target_sum = 1e4
-
-    # Marker filtering
-    min_log2fc = 0.25
-    max_padj = 0.05
 
     # Load AnnData
     adata = sc.read_h5ad(adata_in)
@@ -277,12 +264,11 @@ def main() -> None:
 
     # Filter cells
     adata_filt, celltype_order = filter_cells(
-        adata,
-        confidence_key,
-        label_key,
-        high_conf_threshold,
-        remove_unknown,
-        min_cells_per_type,
+        adata=adata,
+        confidence_key="label_spreading_confidence",
+        label_key=label_key,
+        high_conf_threshold=0.8,
+        min_cells_per_type=20,
     )
 
     # Prepare expression matrix for marker testing.
@@ -290,7 +276,7 @@ def main() -> None:
 
     sc.pp.normalize_total(
         adata_de,
-        target_sum=target_sum,
+        target_sum=1e4,
     )
 
     sc.pp.log1p(adata_de)
@@ -324,9 +310,9 @@ def main() -> None:
     marker_df = select_top_markers(
         deg_df,
         celltype_order,
-        top_n_markers,
-        min_log2fc,
-        max_padj,
+        top_n_markers=5,
+        min_log2fc=0.25,
+        max_padj=0.05,
     )
 
     # Prepare expression matrix for plotting
@@ -342,7 +328,7 @@ def main() -> None:
 
     sc.pp.normalize_total(
         adata_expr,
-        target_sum=target_sum,
+        target_sum=1e4,
     )
 
     # Compute Z-scored expression per gene across cell types
