@@ -28,7 +28,8 @@ scripts=(
     # "4d_celltype_cluster_purity.py"
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
-    "4g_celltype_markers.py"
+    # "4g_celltype_markers.py"
+    "curate_ambiguous_clusters.py"
 )
 
 for script in "${scripts[@]}"; do
