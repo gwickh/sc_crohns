@@ -7,10 +7,14 @@ import matplotlib as mpl
 
 mpl.use("Agg")
 
+import anndata as ad
 import matplotlib.pyplot as plt
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+
+pd.options.mode.string_storage = "python"
+ad.settings.allow_write_nullable_strings = True
 
 scvi_dir = Path(
     "project-area/data/crohns_scrnaseq/10c_14n_analysis/scvi_tools_output/",
@@ -158,6 +162,7 @@ def compute_cluster_membership(
     resolution_list,
     all_label_summaries,
     all_cluster_summaries,
+    output_dir=output_dir,
 ) -> tuple:
     """Compute cluster membership summaries for a range of parameters."""
     for n_neighbors in n_neighbors_list:
@@ -183,6 +188,8 @@ def compute_cluster_membership(
                 neighbors_key=f"neighbors_n{n_neighbors}",
                 key_added=cluster_key,
             )
+
+            adata.write_h5ad(output_dir / "query_concat_curated_clustered.h5ad")
 
             # Raw cell type * cluster counts
             counts = pd.crosstab(
