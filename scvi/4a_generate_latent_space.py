@@ -71,7 +71,7 @@ scheduler_kwargs = {
 }
 
 
-def generate_latent_space(adata, method, run_id) -> scvi.model.SCVI:
+def generate_latent_space(adata, method) -> scvi.model.SCVI:
     """Train latent space model on reference data and project query data."""
     if method.lower() == "scvi":
         print("Training scVI model...")
