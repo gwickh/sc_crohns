@@ -80,15 +80,15 @@ def load_hallmark_network(hallmark_path):
         )
 
     elif not {"source", "target"}.issubset(hallmark.columns):
-        msg = "The Hallmark table must contain either ['geneset', 'genesymbol'] or \
+        msg = f"Hallmark table must contain either ['geneset', 'genesymbol'] or \
             ['source', 'target'].Found: {hallmark.columns.tolist()}"
         raise ValueError(msg)
 
-    # Retain gene-level entries only, where this metadata is available.
+    # Retain gene entries only.
     if "entity_type" in hallmark.columns:
         hallmark = hallmark.loc[hallmark["entity_type"].eq("protein")].copy()
 
-    # Retain Hallmark collection entries, where this metadata is available.
+    # Retain Hallmark collection entries
     if "collection" in hallmark.columns:
         print(
             "\nCollections found:",
