@@ -79,7 +79,9 @@ def cluster_low_conf_by_high_conf_connectivity(
     high_resolution=0.4,
     low_profile_n_neighbors=15,
     low_profile_resolution=0.2,
+    purity_threshold=0.8,
 ):
+    """Compute LC-HC connectivities and cluster."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,20 +137,130 @@ def cluster_low_conf_by_high_conf_connectivity(
         "high_conf_leiden"
     ].values
 
-    # Label high-confidence clusters by majority cell type
+    # ------------------------------------------------------------
+    # Label high-confidence clusters by majority cell-type purity
+    # ------------------------------------------------------------
+
     high_label_table = pd.crosstab(
         high.obs["high_conf_leiden"],
         high.obs[prediction_key],
-    )
+    ).astype(int)
 
+    high_cluster_size = high_label_table.sum(axis=1)
     high_majority_label = high_label_table.idxmax(axis=1)
+    high_majority_count = high_label_table.max(axis=1)
+
+    high_purity = high_majority_count / high_cluster_size
+    high_is_pure = high_purity.ge(purity_threshold)
 
     high_cluster_label = {
-        cluster: f"{cluster} ({high_majority_label.loc[cluster]})"
+        cluster: (
+            f"{cluster} ({high_majority_label.loc[cluster]})"
+            if high_is_pure.loc[cluster]
+            else f"{cluster} (impure)"
+        )
         for cluster in high_label_table.index
     }
 
-    # Build low-cell × high-cluster connectivity profiles
+    high_cluster_stats = pd.DataFrame(
+        {
+            "cluster_label": pd.Series(high_cluster_label),
+            "n_cells": high_cluster_size,
+            "majority_cell_type": high_majority_label,
+            "majority_count": high_majority_count,
+            "purity": high_purity,
+            "is_pure": high_is_pure,
+        }
+    )
+
+    high_cluster_stats.to_csv(
+        output_dir / "high_conf_cluster_purity_stats.csv",
+    )
+
+    high.obs["high_conf_cluster_label"] = high.obs["high_conf_leiden"].map(
+        high_cluster_label
+    )
+
+    adata.obs["high_conf_cluster_label"] = "not_high_conf"
+    adata.obs.loc[
+        high.obs_names,
+        "high_conf_cluster_label",
+    ] = high.obs["high_conf_cluster_label"].values
+
+    # ------------------------------------------------------------
+    # For each cell type, compute how many cells sit in pure HC clusters
+    # ------------------------------------------------------------
+
+    pure_clusters = high_is_pure[high_is_pure].index
+    impure_clusters = high_is_pure[~high_is_pure].index
+
+    hc_celltype_records = []
+
+    for cell_type in high_label_table.columns:
+        total_cells = high_label_table[cell_type].sum()
+
+        n_in_pure_clusters = high_label_table.loc[
+            pure_clusters,
+            cell_type,
+        ].sum()
+
+        n_in_impure_clusters = high_label_table.loc[
+            impure_clusters,
+            cell_type,
+        ].sum()
+
+        own_pure_clusters = [
+            cluster
+            for cluster in pure_clusters
+            if high_majority_label.loc[cluster] == cell_type
+        ]
+
+        n_in_own_pure_clusters = (
+            high_label_table.loc[
+                own_pure_clusters,
+                cell_type,
+            ].sum()
+            if len(own_pure_clusters) > 0
+            else 0
+        )
+
+        hc_celltype_records.append(
+            {
+                "cell_type": cell_type,
+                "n_cells": int(total_cells),
+                "n_cells_in_pure_clusters": int(n_in_pure_clusters),
+                "pct_cells_in_pure_clusters": (
+                    100 * n_in_pure_clusters / total_cells
+                    if total_cells > 0
+                    else np.nan
+                ),
+                "n_cells_in_impure_clusters": int(n_in_impure_clusters),
+                "pct_cells_in_impure_clusters": (
+                    100 * n_in_impure_clusters / total_cells
+                    if total_cells > 0
+                    else np.nan
+                ),
+                "n_cells_in_own_pure_majority_clusters": int(n_in_own_pure_clusters),
+                "pct_cells_in_own_pure_majority_clusters": (
+                    100 * n_in_own_pure_clusters / total_cells
+                    if total_cells > 0
+                    else np.nan
+                ),
+                "own_pure_majority_clusters": ";".join(own_pure_clusters),
+            }
+        )
+
+    hc_celltype_stats = pd.DataFrame(hc_celltype_records).sort_values(
+        "pct_cells_in_own_pure_majority_clusters",
+        ascending=False,
+    )
+
+    hc_celltype_stats.to_csv(
+        output_dir / "high_conf_celltype_purity_stats.csv",
+        index=False,
+    )
+
+    # Build low-cell x high-cluster connectivity profiles
 
     low_high_graph = full_graph[low_mask][:, high_mask].copy()
 
@@ -182,7 +294,7 @@ def cluster_low_conf_by_high_conf_connectivity(
     ).fillna(0)
 
     low_profiles.to_csv(
-        output_dir / "low_cell_to_high_cluster_connectivity_profiles.csv"
+        output_dir / "low_cell_to_high_cluster_connectivity_profiles.csv",
     )
 
     # Cluster low-confidence cells by their high-cluster profiles
@@ -220,29 +332,23 @@ def cluster_low_conf_by_high_conf_connectivity(
         low_profiles.assign(
             low_conf_profile_leiden=low_profile_adata.obs[
                 "low_conf_profile_leiden"
-            ].values
+            ].values,
         )
         .groupby("low_conf_profile_leiden")
         .mean()
     )
 
     lc_to_hc.to_csv(
-        output_dir / "low_conf_cluster_to_high_conf_cluster_connectivity.csv"
+        output_dir / "low_conf_cluster_to_high_conf_cluster_connectivity.csv",
     )
-
-    lc_summary = pd.DataFrame(
-        {
-            "n_cells": low_profile_adata.obs["low_conf_profile_leiden"].value_counts(),
-            "best_matching_high_conf_cluster": lc_to_hc.idxmax(axis=1),
-            "best_matching_fraction": lc_to_hc.max(axis=1),
-        }
-    )
-
-    lc_summary.to_csv(output_dir / "low_conf_cluster_summary.csv")
 
     adata.write_h5ad(output_dir / "adata_low_conf_profile_clusters.h5ad")
 
-    return low_profile_adata, low_profiles, lc_to_hc, lc_summary
+    return (
+        low_profile_adata,
+        low_profiles,
+        lc_to_hc,
+    )
 
 
 def save_clustered_heatmap(df, path, title, cmap="viridis", center=None):
@@ -277,98 +383,107 @@ def main() -> None:
         / "c561826c_sysvi_label_spreading_alpha_0.2_n_5.h5ad",
     )
 
-    # plot_low_conf_umap(adata, 0.8)
-
-    (low_profile_adata, low_profiles, lc_to_hc, lc_summary) = (
-        cluster_low_conf_by_high_conf_connectivity(
-            adata,
-            output_dir=adata_path / "low_confidence_profile_clustering",
-            confidence_threshold=0.8,
-            full_n_neighbors=75,
-            high_resolution=0.4,
-            low_profile_n_neighbors=15,
-            low_profile_resolution=0.1,
-        )
+    adata_ref = ad.read_h5ad(
+        adata_path / "query_concat_curated_clustered_reassigned.h5ad"
     )
 
-    # Heatmap LC cluster × HC cluster connectivity
-    save_clustered_heatmap(
-        lc_to_hc,
-        adata_path
-        / "low_confidence_profile_clustering"
-        / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity.pdf",
-        title="Low-confidence clusters by high-confidence cluster connectivity",
-        cmap="viridis",
+    adata.obs["curated_labels"] = (
+        adata_ref.obs["curated_labels"]
+        .reindex(adata.obs_names)
+        .astype("object")
+        .fillna("low_conf")
+        .astype("category")
     )
 
-    # Heatmap column-scaled LC cluster × HC cluster connectivity
-    lc_to_hc_z = (
-        lc_to_hc.sub(lc_to_hc.mean(axis=0), axis=1)
-        .div(
-            lc_to_hc.std(axis=0).replace(0, np.nan),
-            axis=1,
-        )
-        .fillna(0)
-    )
+    for full_n_neighbors_grid in (10, 15, 30, 50, 75):
+        for high_resolution_grid in (0.3, 0.4, 0.6, 0.8):
+            (low_profile_adata, low_profiles, lc_to_hc) = (
+                cluster_low_conf_by_high_conf_connectivity(
+                    adata,
+                    output_dir=adata_path
+                    / "low_confidence_profile_clustering"
+                    / f"HC_n{full_n_neighbors_grid}_res{high_resolution_grid}",
+                    confidence_threshold=0.8,
+                    full_n_neighbors=full_n_neighbors_grid,
+                    high_resolution=high_resolution_grid,
+                    low_profile_n_neighbors=15,
+                    low_profile_resolution=0.1,
+                )
+            )
 
-    save_clustered_heatmap(
-        lc_to_hc_z,
-        adata_path
-        / "low_confidence_profile_clustering"
-        / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity_zscore.pdf",
-        title="Column-scaled LC-to-HC connectivity",
-        cmap="vlag",
-        center=0,
-    )
+            # Heatmap LC cluster X HC cluster connectivity
+            save_clustered_heatmap(
+                lc_to_hc,
+                adata_path
+                / "low_confidence_profile_clustering"
+                / f"HC_n{full_n_neighbors_grid}_res{high_resolution_grid}"
+                / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity.pdf",
+                title="Low-confidence clusters by high-confidence cluster connectivity",
+                cmap="viridis",
+            )
 
-    # Heatmap low-confidence cells ordered by LC cluster
-    low_cell_profiles = low_profiles.copy()
-    low_cell_profiles["low_conf_profile_leiden"] = low_profile_adata.obs[
-        "low_conf_profile_leiden",
-    ].values
+            # Heatmap column-scaled LC cluster x HC cluster connectivity
+            lc_to_hc_z = (
+                lc_to_hc.sub(lc_to_hc.mean(axis=0), axis=1)
+                .div(
+                    lc_to_hc.std(axis=0).replace(0, np.nan),
+                    axis=1,
+                )
+                .fillna(0)
+            )
 
-    low_cell_profiles = low_cell_profiles.sort_values("low_conf_profile_leiden")
+            save_clustered_heatmap(
+                lc_to_hc_z,
+                adata_path
+                / "low_confidence_profile_clustering"
+                / f"HC_n{full_n_neighbors_grid}_res{high_resolution_grid}"
+                / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity_zscore.pdf",
+                title="Column-scaled LC-to-HC connectivity",
+                cmap="vlag",
+                center=0,
+            )
 
-    row_groups = low_cell_profiles.pop("low_conf_profile_leiden")
+            # Heatmap low-confidence cells ordered by LC cluster
+            low_cell_profiles = low_profiles.copy()
+            low_cell_profiles["low_conf_profile_leiden"] = low_profile_adata.obs[
+                "low_conf_profile_leiden",
+            ].values
 
-    plot_profiles = low_cell_profiles.assign(
-        low_conf_profile_leiden=row_groups.values
-    ).groupby("low_conf_profile_leiden", group_keys=False)
+            low_cell_profiles = low_cell_profiles.sort_values("low_conf_profile_leiden")
 
-    plot_row_groups = plot_profiles.pop("low_conf_profile_leiden")
+            row_groups = low_cell_profiles.pop("low_conf_profile_leiden")
 
-    grid = sns.clustermap(
-        plot_profiles,
-        row_cluster=False,
-        col_cluster=True,
-        cmap="viridis",
-        linewidths=0,
-        yticklabels=False,
-        figsize=(max(8, 0.35 * plot_profiles.shape[1]), 10),
-        cbar_kws={"label": "Connectivity fraction"},
-    )
+            plot_profiles = low_cell_profiles.assign(
+                low_conf_profile_leiden=row_groups.values,
+            ).groupby("low_conf_profile_leiden", group_keys=False)
 
-    grid.fig.suptitle(
-        "Low-confidence cells by high-confidence cluster connectivity",
-        y=1.02,
-    )
+            plot_row_groups = plot_profiles.pop("low_conf_profile_leiden")
 
-    grid.fig.savefig(
-        adata_path
-        / "low_confidence_profile_clustering"
-        / "heatmap_low_conf_cells_to_high_conf_clusters.png",
-        bbox_inches="tight",
-        dpi=300,
-    )
+            grid = sns.clustermap(
+                plot_profiles,
+                row_cluster=False,
+                col_cluster=True,
+                cmap="viridis",
+                linewidths=0,
+                yticklabels=False,
+                figsize=(max(8, 0.35 * plot_profiles.shape[1]), 10),
+                cbar_kws={"label": "Connectivity fraction"},
+            )
 
-    grid.fig.savefig(
-        adata_path
-        / "low_confidence_profile_clustering"
-        / "heatmap_low_conf_cells_to_high_conf_clusters.pdf",
-        bbox_inches="tight",
-    )
+            grid.fig.suptitle(
+                "Low-confidence cells by high-confidence cluster connectivity",
+                y=1.02,
+            )
 
-    plt.close(grid.fig)
+            grid.fig.savefig(
+                adata_path
+                / "low_confidence_profile_clustering"
+                / f"HC_n{full_n_neighbors_grid}_res{high_resolution_grid}"
+                / "heatmap_low_conf_cells_to_high_conf_clusters.pdf",
+                bbox_inches="tight",
+            )
+
+            plt.close(grid.fig)
 
 
 if __name__ == "__main__":
