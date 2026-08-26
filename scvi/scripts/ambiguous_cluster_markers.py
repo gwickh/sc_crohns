@@ -26,7 +26,6 @@ candidate_clusters = {
     "ADAMDEC1+ stromal": ["17", "19"],
     "Macrophages": ["34", "14", "2", "3"],
     "Plasma cells": ["4", "16"],
-    "Monocytes": ["26", "33"],
 }
 
 GROUPBY = "temp_subtypes"
