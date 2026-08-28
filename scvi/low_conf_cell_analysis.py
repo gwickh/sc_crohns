@@ -694,141 +694,141 @@ def save_clustered_heatmap(df, path, title, cmap="viridis", center=None):
 
 def main() -> None:
     """Visualise and cluster low confidence cells."""
-    # adata = ad.read_h5ad(
-    #     adata_path
-    #     / "sysvi_tuning"
-    #     / "c561826c_sysvi_label_spreading_alpha_0.2_n_5.h5ad",
-    # )
+    adata = ad.read_h5ad(
+        adata_path
+        / "sysvi_tuning"
+        / "c561826c_sysvi_label_spreading_alpha_0.2_n_5.h5ad",
+    )
 
-    # adata_ref = ad.read_h5ad(
-    #     adata_path / "query_concat_curated_clustered_reassigned.h5ad"
-    # )
+    adata_ref = ad.read_h5ad(
+        adata_path / "query_concat_curated_clustered_reassigned.h5ad"
+    )
 
-    # adata.obs["curated_labels"] = (
-    #     adata_ref.obs["curated_labels"]
-    #     .reindex(adata.obs_names)
-    #     .astype("object")
-    #     .fillna("low_conf")
-    #     .astype("category")
-    # )
+    adata.obs["curated_labels"] = (
+        adata_ref.obs["curated_labels"]
+        .reindex(adata.obs_names)
+        .astype("object")
+        .fillna("low_conf")
+        .astype("category")
+    )
 
-    # for neighbors_grid in (10, 15, 30, 50, 75):
-    #     for resolution_grid in (0.3, 0.4, 0.6, 0.8):
-    # (low_profile_adata, low_profiles, lc_to_hc) = (
-    #     cluster_low_conf_by_high_conf_connectivity(
-    #         adata,
-    #         output_dir=adata_path
-    #         / "low_confidence_profile_clustering"
-    #         / f"HC_n{neighbors_grid}_res{resolution_grid}",
-    #         confidence_threshold=0.8,
-    #         full_n_neighbors=neighbors_grid,
-    #         high_resolution=resolution_grid,
-    #         low_profile_n_neighbors=neighbors_grid,
-    #         low_profile_resolution=resolution_grid,
-    #     )
-    # )
+    for neighbors_grid in (10, 15, 30, 50, 75):
+        for resolution_grid in (0.3, 0.4, 0.6, 0.8):
+            (low_profile_adata, low_profiles, lc_to_hc) = (
+                cluster_low_conf_by_high_conf_connectivity(
+                    adata,
+                    output_dir=adata_path
+                    / "low_confidence_profile_clustering"
+                    / f"HC_n{neighbors_grid}_res{resolution_grid}",
+                    confidence_threshold=0.8,
+                    full_n_neighbors=neighbors_grid,
+                    high_resolution=resolution_grid,
+                    low_profile_n_neighbors=neighbors_grid,
+                    low_profile_resolution=resolution_grid,
+                )
+            )
 
-    # (
-    #     adata,
-    #     low_profile_adata,
-    #     low_profiles,
-    #     lc_to_hc,
-    #     lc_summary,
-    #     cell_summary,
-    # ) = cluster_low_conf_by_hc_celltype_anchors(
-    #     adata,
-    #     output_dir=adata_path
-    #     / "low_confidence_celltype_anchor_clustering"
-    #     / f"HC_n{neighbors_grid}_res{resolution_grid}",
-    #     confidence_threshold=0.8,
-    #     high_confidence_threshold=0.9,
-    #     full_n_neighbors=75,
-    #     low_profile_n_neighbors=neighbors_grid,
-    #     low_profile_resolution=resolution_grid,
-    # )
+            (
+                adata,
+                low_profile_adata,
+                low_profiles,
+                lc_to_hc,
+                lc_summary,
+                cell_summary,
+            ) = cluster_low_conf_by_hc_celltype_anchors(
+                adata,
+                output_dir=adata_path
+                / "low_confidence_celltype_anchor_clustering"
+                / f"HC_n{neighbors_grid}_res{resolution_grid}",
+                confidence_threshold=0.8,
+                high_confidence_threshold=0.9,
+                full_n_neighbors=75,
+                low_profile_n_neighbors=neighbors_grid,
+                low_profile_resolution=resolution_grid,
+            )
 
-    # # Heatmap LC cluster X HC cluster connectivity
-    # save_clustered_heatmap(
-    #     lc_to_hc,
-    #     adata_path
-    #     / "low_confidence_celltype_anchor_clustering"
-    #     / f"HC_n{neighbors_grid}_res{resolution_grid}"
-    #     / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity.pdf",
-    #     title="Low-confidence clusters by high-confidence cluster connectivity",
-    #     cmap="viridis",
-    # )
+            # Heatmap LC cluster X HC cluster connectivity
+            save_clustered_heatmap(
+                lc_to_hc,
+                adata_path
+                / "low_confidence_celltype_anchor_clustering"
+                / f"HC_n{neighbors_grid}_res{resolution_grid}"
+                / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity.pdf",
+                title="Low-confidence clusters by high-confidence cluster connectivity",
+                cmap="viridis",
+            )
 
-    # # Heatmap column-scaled LC cluster x HC cluster connectivity
-    # lc_to_hc_z = (
-    #     lc_to_hc.sub(lc_to_hc.mean(axis=0), axis=1)
-    #     .div(
-    #         lc_to_hc.std(axis=0).replace(0, np.nan),
-    #         axis=1,
-    #     )
-    #     .fillna(0)
-    # )
+            # Heatmap column-scaled LC cluster x HC cluster connectivity
+            lc_to_hc_z = (
+                lc_to_hc.sub(lc_to_hc.mean(axis=0), axis=1)
+                .div(
+                    lc_to_hc.std(axis=0).replace(0, np.nan),
+                    axis=1,
+                )
+                .fillna(0)
+            )
 
-    # save_clustered_heatmap(
-    #     lc_to_hc_z,
-    #     adata_path
-    #     / "low_confidence_celltype_anchor_clustering"
-    #     / f"HC_n{neighbors_grid}_res{resolution_grid}"
-    #     / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity_zscore.pdf",
-    #     title="Column-scaled LC-to-HC connectivity",
-    #     cmap="vlag",
-    #     center=0,
-    # )
+            save_clustered_heatmap(
+                lc_to_hc_z,
+                adata_path
+                / "low_confidence_celltype_anchor_clustering"
+                / f"HC_n{neighbors_grid}_res{resolution_grid}"
+                / "heatmap_low_conf_cluster_to_high_conf_cluster_connectivity_zscore.pdf",
+                title="Column-scaled LC-to-HC connectivity",
+                cmap="vlag",
+                center=0,
+            )
 
-    # # Heatmap low-confidence cells ordered by LC cluster
-    # low_cell_profiles = low_profiles.copy()
+            # Heatmap low-confidence cells ordered by LC cluster
+            low_cell_profiles = low_profiles.copy()
 
-    # low_cell_profiles["low_conf_profile_leiden"] = low_profile_adata.obs[
-    #     "low_conf_profile_leiden"
-    # ].values
+            low_cell_profiles["low_conf_profile_leiden"] = low_profile_adata.obs[
+                "low_conf_profile_leiden"
+            ].values
 
-    # low_cell_profiles = low_cell_profiles.sort_values("low_conf_profile_leiden")
+            low_cell_profiles = low_cell_profiles.sort_values("low_conf_profile_leiden")
 
-    # # Optional downsample per LC cluster for readability
-    # max_cells_per_cluster = 300
+            # Optional downsample per LC cluster for readability
+            max_cells_per_cluster = 300
 
-    # plot_profiles = low_cell_profiles.groupby(
-    #     "low_conf_profile_leiden", group_keys=False
-    # ).apply(
-    #     lambda x: x.sample(
-    #         min(len(x), max_cells_per_cluster),
-    #         random_state=0,
-    #     )
-    # )
+            plot_profiles = low_cell_profiles.groupby(
+                "low_conf_profile_leiden", group_keys=False
+            ).apply(
+                lambda x: x.sample(
+                    min(len(x), max_cells_per_cluster),
+                    random_state=0,
+                )
+            )
 
-    # plot_row_groups = plot_profiles["low_conf_profile_leiden"].copy()
+            plot_row_groups = plot_profiles["low_conf_profile_leiden"].copy()
 
-    # plot_profiles = plot_profiles.drop(columns="low_conf_profile_leiden")
+            plot_profiles = plot_profiles.drop(columns="low_conf_profile_leiden")
 
-    # grid = sns.clustermap(
-    #     plot_profiles,
-    #     row_cluster=False,
-    #     col_cluster=True,
-    #     cmap="viridis",
-    #     linewidths=0,
-    #     yticklabels=False,
-    #     figsize=(max(8, 0.35 * plot_profiles.shape[1]), 10),
-    #     cbar_kws={"label": "Connectivity fraction"},
-    # )
+            grid = sns.clustermap(
+                plot_profiles,
+                row_cluster=False,
+                col_cluster=True,
+                cmap="viridis",
+                linewidths=0,
+                yticklabels=False,
+                figsize=(max(8, 0.35 * plot_profiles.shape[1]), 10),
+                cbar_kws={"label": "Connectivity fraction"},
+            )
 
-    # grid.fig.suptitle(
-    #     "Low-confidence cells by high-confidence cluster connectivity",
-    #     y=1.02,
-    # )
+            grid.fig.suptitle(
+                "Low-confidence cells by high-confidence cluster connectivity",
+                y=1.02,
+            )
 
-    # grid.fig.savefig(
-    #     adata_path
-    #     / "low_confidence_celltype_anchor_clustering"
-    #     / f"HC_n{neighbors_grid}_res{resolution_grid}"
-    #     / "heatmap_low_conf_cells_to_high_conf_clusters.pdf",
-    #     bbox_inches="tight",
-    # )
+            grid.fig.savefig(
+                adata_path
+                / "low_confidence_celltype_anchor_clustering"
+                / f"HC_n{neighbors_grid}_res{resolution_grid}"
+                / "heatmap_low_conf_cells_to_high_conf_clusters.pdf",
+                bbox_inches="tight",
+            )
 
-    # plt.close(grid.fig)
+            plt.close(grid.fig)
 
     summary = summarise_lc_anchor_runs(
         output_base=adata_path / "low_confidence_celltype_anchor_clustering",
