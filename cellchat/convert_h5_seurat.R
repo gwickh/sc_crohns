@@ -1,9 +1,13 @@
 library(zellkonverter)
-Sys.setenv(HDF5_USE_FILE_LOCKING="FALSE")
+library(Seurat)
+library(SingleCellExperiment)
 
-setwd("~/NetworkDrives/project-area/data/crohns_scrnaseq/scvi_tools_output/Integrated_05_label")
+setwd("~/project-area/data/crohns_scrnaseq/10c_14n_analysis/")
 
-sce <- readH5AD("query_concat_curated.h5ad")
-seu <- as.Seurat(sce, counts = "counts", data = "X") 
+sce <- readH5AD("adata_final.h5ad", version = "0.12.3", reader = "R")
 
-saveRDS(seu, file = "query_concat_curated.Rds")
+seu <- as.Seurat(sce, counts = "X", data = NULL)
+
+seu <- NormalizeData(seu)
+
+saveRDS(seu, file = "cellchat_output/adata_low_conf_hc_celltype_anchor_profiles.Rds")
