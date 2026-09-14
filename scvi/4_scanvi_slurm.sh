@@ -29,7 +29,8 @@ scripts=(
     # "4e_celltype_similarity_matrix.py"
     # "4f_curated_celltype_clustering.py"
     # "4g_celltype_markers.py"
-    "low_conf_cell_analysis.py"
+    # "4h_pseudobulk_dea.py"
+    optimise_umap.py
 )
 
 for script in "${scripts[@]}"; do

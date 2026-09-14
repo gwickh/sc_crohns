@@ -10,7 +10,7 @@
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-medium
 
-# Usage: sbatch sc_crohns/cellchat/cellchat_slurm.sh sc_crohns/cellchat/ project-area/data/crohns_scrnaseq/cellchat_output/
+# Usage: sbatch sc_crohns/cellchat/cellchat_slurm.sh sc_crohns/cellchat/ project-area/data/crohns_scrnaseq/10c_14n_analysis/cellchat_output/
 
 # Arguments
 SCRIPT_DIR="$1"
@@ -20,10 +20,12 @@ OUT_DIR="$2"
 mkdir -p "${OUT_DIR}"
 
 source ~/.bashrc
-conda activate r_env
+conda activate r_scripts
 scripts=(
+    "convert_h5_seurat.R"
     "1a_cellchat_calculate_interactions.R"
-    # "1b_cellchat_compare.R"
+    "1b_cellchat_compare.R"
+    "1b_cellchat_LR_interactions.R"
 )
 
 for script in "${scripts[@]}"; do

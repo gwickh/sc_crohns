@@ -10,7 +10,7 @@
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
 #SBATCH --partition=ei-medium
 
-# Usage: sbatch sc_crohns/pertpy/pertpy_slurm.sh sc_crohns/pertpy/ project-area/data/crohns_scrnaseq/pertpy_output/
+# Usage: sbatch sc_crohns/pertpy/pertpy_slurm.sh sc_crohns/pertpy/ project-area/data/crohns_scrnaseq/10c_14n_analysis/pertpy_output/
 
 # Arguments
 SCRIPT_DIR="$1"
@@ -23,8 +23,7 @@ source ~/.bashrc
 conda activate python_scripts
 scripts=(
     # "1a_scCODA_fit.py"
-    # "1b_scCODA_visualisations.py"
-    "2a_milo_train.py"
+    "1b_scCODA_visualisations.py"
 )
 
 for script in "${scripts[@]}"; do
