@@ -21,6 +21,45 @@ candidate_clusters = {
     "Plasma cells": ["4", "16"],
 }
 
+map_category = {
+    "CD4 T cell": "T cells",
+    "CD8 T cell": "T cells",
+    "Neuronal": "Neuronal",
+    "Endothelial": "Endothelial",
+    "Goblet": "Epithelial",
+    "BEST4+ epithelial": "Epithelial",
+    "CD8 T mem": "T cells",
+    "cDC": "Myeloid",
+    "Enterocyte": "Epithelial",
+    "Pericyte": "Mesenchymal",
+    "B cells_cl_8": "B cells",
+    "B cells_cl_20": "B cells",
+    "B cells_cl_21": "B cells",
+    "Plasma cells_cl_4": "Plasma cells",
+    "Plasma cells_cl_16": "Plasma cells",
+    "Enteroendocrine cell": "Epithelial",
+    "ADAMDEC1+ stromal_cl_17": "Mesenchymal",
+    "ADAMDEC1+ stromal_cl_19": "Mesenchymal",
+    "NK T cell": "T cells",
+    "NK cell": "T cells",
+    "Macrophages_cl_34": "Myeloid",
+    "Macrophages_cl_14": "Myeloid",
+    "Macrophages_cl_2": "Myeloid",
+    "Macrophages_cl_3": "Myeloid",
+    "Mast cell": "Myeloid",
+    "Mesenchymal": "Mesenchymal",
+    "Monocytes": "Myeloid",
+    "Myofibroblast": "Mesenchymal",
+    "Paneth": "Epithelial",
+    "Red blood cells": "Red blood cells",
+    "Naïve CD8 T cell": "T cells",
+    "Stem cell": "Epithelial",
+    "NPY+ Stromal": "Mesenchymal",
+    "Tfh": "T cells",
+    "Transitional Stromal C3+": "Mesenchymal",
+    "Tuft": "Epithelial",
+}
+
 
 def reassign_candidate_clusters_by_centroid(
     adata,
@@ -28,7 +67,7 @@ def reassign_candidate_clusters_by_centroid(
     label_key="label_spreading_prediction_filtered",
     cluster_key="leiden_n30_r1p0",
     embedding_key="X_embeddings",
-    output_key="label_spreading_prediction_filtered",
+    output_key="curated_labels",
     distance_metric="cosine",
 ):
     """
