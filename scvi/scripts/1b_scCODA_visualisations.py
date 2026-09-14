@@ -1,13 +1,14 @@
+import os
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-import os
 
-PATH = "project-area/data/crohns_scrnaseq/scvi_tools_output/Integrated_05_label" 
-OUTPATH = PATH + "/../../pertpy_output"
+OUTPATH = Path("project-area/data/crohns_scrnaseq/10c_14n_analysis/pertpy_output/")
 
-ref_name = "Mesenchymal"
+ref_name = "B cells"
 
 # Load data
 df = pd.read_csv(os.path.join(OUTPATH, "category_log2fc_df.csv"))
@@ -24,7 +25,7 @@ colors = [color_map[c] for c in cats]
 # Point sizes from inclusion probability
 if "Inclusion probability" in df.columns:
     incl = df["Inclusion probability"].to_numpy()
-    sizes = 300 * incl  
+    sizes = 300 * incl
 else:
     incl = np.ones(len(df))
     sizes = np.full(len(df), 50)
@@ -35,26 +36,29 @@ x_lo = df["log2FC_HDI_low"].to_numpy()
 x_hi = df["log2FC_HDI_high"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(5, 0.3 * len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
-        x[i], y[i],
+        x[i],
+        y[i],
         xerr=[[x[i] - x_lo[i]], [x_hi[i] - x[i]]],
-        fmt='o',
-        elinewidth=1.2, capsize=3,
-        color=colors[i], ecolor=colors[i],
-        markersize=np.sqrt(sizes[i]) 
+        fmt="o",
+        elinewidth=1.2,
+        capsize=3,
+        color=colors[i],
+        ecolor=colors[i],
+        markersize=np.sqrt(sizes[i]),
     )
 
-ax.axvline(0, ls='--', lw=1, color='gray')
+ax.axvline(0, ls="--", lw=1, color="gray")
 
 # Cosmetics
 ax.set_yticks(y)
 ax.set_yticklabels(df["Cell Type"])
 ax.set_xlabel("Log2 fold change (HDI)")
 ax.set_title("Differential composition")
-ax.grid(axis='x', alpha=0.2)
+ax.grid(axis="x", alpha=0.2)
 
 fig.tight_layout()
 
@@ -78,7 +82,7 @@ colors = [color_map[c] for c in cats]
 # Point sizes from inclusion probability
 if "Inclusion probability" in df.columns:
     incl = df["Inclusion probability"].to_numpy()
-    sizes = 300 * incl   # scale factor for visibility
+    sizes = 300 * incl  # scale factor for visibility
 else:
     incl = np.ones(len(df))
     sizes = np.full(len(df), 50)
@@ -89,45 +93,58 @@ x_lo = df["HDI 3%"].to_numpy()
 x_hi = df["HDI 97%"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(5, 0.3 * len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
-        x[i], y[i],
+        x[i],
+        y[i],
         xerr=[[x[i] - x_lo[i]], [x_hi[i] - x[i]]],
-        fmt='o',
-        elinewidth=1.2, capsize=3,
-        color=colors[i], ecolor=colors[i],
-        markersize=np.sqrt(sizes[i]) 
+        fmt="o",
+        elinewidth=1.2,
+        capsize=3,
+        color=colors[i],
+        ecolor=colors[i],
+        markersize=np.sqrt(sizes[i]),
     )
 
-ax.axvline(0, ls='--', lw=1, color='gray')
+ax.axvline(0, ls="--", lw=1, color="gray")
 
 # Cosmetics
 ax.set_yticks(y)
 ax.set_yticklabels(df["Cell Type"])
 ax.set_xlabel(r"$\tilde{\beta}$ (HDI)")
 ax.set_title("Differential composition")
-ax.grid(axis='x', alpha=0.2)
+ax.grid(axis="x", alpha=0.2)
 
 ref_y = df.index[df["Cell Type"] == ref_name][0]  # row index in df
 ax.text(
-    0, ref_y, "*", color="black", fontsize=20,
-    va="center", ha="center", fontweight="bold"
+    0,
+    ref_y,
+    "*",
+    color="black",
+    fontsize=20,
+    va="center",
+    ha="center",
+    fontweight="bold",
 )
 
 # Legend for inclusion probability (sizes)
 for prob in np.linspace(0.1, 1.0, 10):
-    plt.scatter([], [], s=300*prob, c="gray", alpha=0.6, label=f"{prob:.2f}")
+    plt.scatter([], [], s=300 * prob, c="gray", alpha=0.6, label=f"{prob:.2f}")
 
-leg2 = ax.legend(title="Inclusion probability", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=False)
+leg2 = ax.legend(
+    title="Inclusion probability",
+    bbox_to_anchor=(1.02, 1),
+    loc="upper left",
+    frameon=False,
+)
 
 fig.tight_layout()
 
 # Save
 out_pdf = os.path.join(OUTPATH, "category_coef.pdf")
 fig.savefig(out_pdf, bbox_inches="tight")
-
 
 
 ref_name = "Mast cell"
@@ -147,7 +164,7 @@ colors = [color_map[c] for c in cats]
 # Point sizes from inclusion probability
 if "Inclusion probability" in df.columns:
     incl = df["Inclusion probability"].to_numpy()
-    sizes = 300 * incl  
+    sizes = 300 * incl
 else:
     incl = np.ones(len(df))
     sizes = np.full(len(df), 50)
@@ -158,30 +175,33 @@ x_lo = df["log2FC_HDI_low"].to_numpy()
 x_hi = df["log2FC_HDI_high"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(10, 0.3 * len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
-        x[i], y[i],
+        x[i],
+        y[i],
         xerr=[[x[i] - x_lo[i]], [x_hi[i] - x[i]]],
-        fmt='o',
-        elinewidth=1.2, capsize=3,
-        color=colors[i], ecolor=colors[i],
-        markersize=np.sqrt(sizes[i]) 
+        fmt="o",
+        elinewidth=1.2,
+        capsize=3,
+        color=colors[i],
+        ecolor=colors[i],
+        markersize=np.sqrt(sizes[i]),
     )
 
-ax.axvline(0, ls='--', lw=1, color='gray')
+ax.axvline(0, ls="--", lw=1, color="gray")
 
 # Cosmetics
 ax.set_yticks(y)
 ax.set_yticklabels(df["Cell Type"])
 
 ax.set_ylim(-0.5, len(df) - 0.5)
-ax.margins(y=0)  
+ax.margins(y=0)
 
 ax.set_xlabel("Log2 fold change (HDI)")
 ax.set_title("Differential composition")
-ax.grid(axis='x', alpha=0.2)
+ax.grid(axis="x", alpha=0.2)
 
 fig.tight_layout()
 
@@ -205,7 +225,7 @@ colors = [color_map[c] for c in cats]
 # Point sizes from inclusion probability
 if "Inclusion probability" in df.columns:
     incl = df["Inclusion probability"].to_numpy()
-    sizes = 300 * incl   # scale factor for visibility
+    sizes = 300 * incl  # scale factor for visibility
 else:
     incl = np.ones(len(df))
     sizes = np.full(len(df), 50)
@@ -216,41 +236,55 @@ x_lo = df["HDI 3%"].to_numpy()
 x_hi = df["HDI 97%"].to_numpy()
 
 # Figure
-fig, ax = plt.subplots(figsize=(8, max(5, 0.3*len(df))))
+fig, ax = plt.subplots(figsize=(8, max(10, 0.3 * len(df))))
 
 for i in range(len(df)):
     ax.errorbar(
-        x[i], y[i],
+        x[i],
+        y[i],
         xerr=[[x[i] - x_lo[i]], [x_hi[i] - x[i]]],
-        fmt='o',
-        elinewidth=1.2, capsize=3,
-        color=colors[i], ecolor=colors[i],
-        markersize=np.sqrt(sizes[i]) 
+        fmt="o",
+        elinewidth=1.2,
+        capsize=3,
+        color=colors[i],
+        ecolor=colors[i],
+        markersize=np.sqrt(sizes[i]),
     )
 
-ax.axvline(0, ls='--', lw=1, color='gray')
+ax.axvline(0, ls="--", lw=1, color="gray")
 
 # Cosmetics
 ax.set_yticks(y)
 ax.set_yticklabels(df["Cell Type"])
 ax.set_ylim(-0.5, len(df) - 0.5)
-ax.margins(y=0)  
+ax.margins(y=0)
 
 ax.set_xlabel(r"$\tilde{\beta}$ (HDI)")
 ax.set_title("Differential composition")
-ax.grid(axis='x', alpha=0.2)
+ax.grid(axis="x", alpha=0.2)
 
 ref_y = df.index[df["Cell Type"] == ref_name][0]  # row index in df
 ax.text(
-    0, ref_y, "*", color="black", fontsize=20,
-    va="center", ha="center", fontweight="bold"
+    0,
+    ref_y,
+    "*",
+    color="black",
+    fontsize=20,
+    va="center",
+    ha="center",
+    fontweight="bold",
 )
 
 # Legend for inclusion probability (sizes)
 for prob in np.linspace(0.1, 1.0, 10):
-    plt.scatter([], [], s=300*prob, c="gray", alpha=0.6, label=f"{prob:.2f}")
+    plt.scatter([], [], s=300 * prob, c="gray", alpha=0.6, label=f"{prob:.2f}")
 
-leg2 = ax.legend(title="Inclusion probability", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=False)
+leg2 = ax.legend(
+    title="Inclusion probability",
+    bbox_to_anchor=(1.02, 1),
+    loc="upper left",
+    frameon=False,
+)
 
 fig.tight_layout()
 
