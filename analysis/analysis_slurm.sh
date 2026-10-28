@@ -8,7 +8,7 @@
 #SBATCH --mem=256G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-compute
 
 # Usage: sbatch sc_crohns/analysis/analysis_slurm.sh sc_crohns/analysis/ project-area/data/crohns_scrnaseq/10c_14n_analysis/pseudobulk_dea/
 
@@ -23,7 +23,13 @@ source ~/.bashrc
 conda activate r_scripts
 scripts=(
     # 2_pathway_analysis.R
-    3_GO_hierarchy_traversal.R
+    # 3_GO_hierarchy_traversal.R
+    # 4_GO_visualisation.R
+    # 5_GO_significant_DAGs.R
+    6_Reactome_hierarchy_traversal.R
+    7_Reactome_visualisation.R
+    8_Reactome_significant_DAGs.R
+
 )
 
 for script in "${scripts[@]}"; do

@@ -6,7 +6,7 @@
 #SBATCH --mem=128GB
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-compute
 
 # Usage: sbatch PATH/TO/rds_to_h5ad.sh <SCRIPT_PATH> <RDS_FILE_PATH>
 

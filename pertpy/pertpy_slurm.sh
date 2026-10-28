@@ -8,7 +8,7 @@
 #SBATCH --mem=128G
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-compute
 
 # Usage: sbatch sc_crohns/pertpy/pertpy_slurm.sh sc_crohns/pertpy/ project-area/data/crohns_scrnaseq/10c_14n_analysis/pertpy_output/
 

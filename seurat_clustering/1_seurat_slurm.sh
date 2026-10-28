@@ -8,7 +8,7 @@
 #SBATCH --mem=128GB
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=yep25yan@nbi.ac.uk
-#SBATCH --partition=ei-medium
+#SBATCH --partition=ei-compute
 
 # Arguments
 SCRIPT_DIR="$1"
