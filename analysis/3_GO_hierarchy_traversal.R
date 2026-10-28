@@ -5,24 +5,29 @@
 # This script performs no enrichment testing. It uses already-computed GSEA
 # results, calculates term-level evidence and redundancy metrics, and chooses
 # an adaptive display level:
-#   * biologically prioritised fibrosis branches retain selected granular terms;
-#   * peripheral/redundant terms are mapped to a verified GO ancestor where
-#     possible;
+#   * evidence-supported, distinct terms retain selected granular detail;
+#   * redundant or less informative terms are mapped to a verified GO ancestor
+#     where possible, using the same criteria for every GO branch;
 #   * an rrvgo representative is explicitly labelled as semantic rather than
 #     as an ontology parent when no useful common ancestor exists.
-# The primary output is a globally unique GO-ID list. Granular representatives
-# are capped once per semantic cluster/direction, and strict is_a/part_of
-# ancestors are removed when a retained descendant is available.
+# The primary output in each analysis scope is a unique GO-ID list. Granular
+# representatives are capped once per semantic cluster/direction, and strict
+# is_a/part_of ancestors are removed when a retained descendant is available.
+# By default, this script runs the computation once for the whole atlas and
+# once for each predefined biological compartment. Each run is independent:
+# candidate terms, evidence metrics, semantic groups, roll-ups and hierarchy
+# pruning are all recalculated after restricting the input cell populations.
 #
 # Usage (all arguments are optional):
-#   Rscript summarize_go_bp_adaptive.R \
+#   Rscript 3_GO_hierarchy_traversal_by_compartment.R \
 #     significant_results.csv \
 #     all_results.csv \
-#     output_directory \
-#     go_id_mapping.csv \
-#     priority_branches.csv
+#     output_root_directory \
+#     go_id_mapping.csv
 #
 # Use the literal string "NA" to omit an optional file argument.
+# Argument 5 is reserved; retain an NA placeholder in older batch commands.
+# Arguments 6 and 7 are internal worker arguments used by the batch driver.
 
 options(stringsAsFactors = FALSE)
 
@@ -42,7 +47,7 @@ config <- list(
     project_dir, "pathway_enrichment", "go_bp_gsea_all_results.csv"
   ),
   output_dir = file.path(
-    project_dir, "pathway_enrichment", "go_bp_adaptive_summary"
+    project_dir, "pathway_enrichment", "go_bp_adaptive_summary_by_compartment_uniform"
   ),
 
   # Preferred optional mapping columns:
@@ -50,9 +55,6 @@ config <- list(
   # The supplied MSigDB CSV lacks GO IDs, so the default fallback reconstructs
   # IDs from GO.db term names and writes a complete mapping audit.
   go_id_mapping_file = NA_character_,
-
-  # Optional CSV columns: theme, root_go_id, max_granular
-  priority_file = NA_character_,
 
   fdr_column = "q_value_within_collection_cell_type",
   fdr_threshold = 0.05,
@@ -72,19 +74,15 @@ config <- list(
   min_leading_edge_jaccard = 0.30,
   min_leading_edge_overlap = 0.50,
 
-  default_max_granular_per_cluster = 3L,
-  hard_max_granular_per_cluster = 6L,
-
   # The final reporting list uses a stricter gate than statistical
   # significance. Terms that fail this gate are retained at a coarser level;
-  # they are not discarded. Priority branches retain their existing evidence
-  # gate, while peripheral branches use these stricter display thresholds.
+  # they are not discarded. These display thresholds apply to every GO branch.
   final_granular_fdr = 0.01,
   final_granular_min_abs_nes = 1.50,
   final_granular_min_depth = 4,
-  final_max_peripheral_per_cluster = 1L,
+  final_max_granular_per_cluster = 1L,
 
-  # Peripheral clusters are rolled up only to a genuine common ancestor.
+  # Clusters are rolled up only to a genuine common ancestor.
   # Depth is descriptive because GO is a DAG; information content is also used.
   min_rollup_depth = 2,
   target_rollup_depth = 3.5,
@@ -110,58 +108,364 @@ config$significant_file <- arg_or_default(1, config$significant_file)
 config$all_results_file <- arg_or_default(2, config$all_results_file)
 config$output_dir <- arg_or_default(3, config$output_dir)
 config$go_id_mapping_file <- arg_or_default(4, config$go_id_mapping_file)
-config$priority_file <- arg_or_default(5, config$priority_file)
+if (length(args) >= 5L && nzchar(args[[5]]) && toupper(args[[5]]) != "NA") {
+  warning("Argument 5 is reserved and ignored; no branch-specific settings are used.")
+}
+
+# -----------------------------------------------------------------------------
+# Analysis scopes and batch driver
+# -----------------------------------------------------------------------------
+
+# These labels are matched after Unicode transliteration, whitespace cleanup
+# and case folding. The spelling found in the input is retained in every
+# scientific output. In particular, CD8 T mem is not treated as an alias for a
+# naive CD8 T-cell population.
+scope_definitions <- list(
+  whole_atlas = list(
+    label = "Whole atlas",
+    type = "atlas",
+    cell_types = character()
+  ),
+  t_lymphocytes = list(
+    label = "T-lymphocytes",
+    type = "compartment",
+    cell_types = c(
+      "CD4 T cell", "CD8 T cell", "Naïve CD8 T cell", "Tfh",
+      "NK T cell", "NK cell"
+    )
+  ),
+  b_lymphocytes = list(
+    label = "B-lymphocytes",
+    type = "compartment",
+    cell_types = c("B cells_cl_8", "B cells_cl_20", "B cells_cl_21")
+  ),
+  plasma_cells = list(
+    label = "Plasma cells",
+    type = "compartment",
+    cell_types = c("Plasma cells_cl_4", "Plasma cells_cl_16")
+  ),
+  endothelial_pericytes = list(
+    label = "Endothelial cells & related pericytes",
+    type = "compartment",
+    cell_types = c("Endothelial", "Pericyte")
+  ),
+  myofibroblasts_stromal = list(
+    label = "Myofibroblasts & stromal cells",
+    type = "compartment",
+    cell_types = c(
+      "Myofibroblast", "Mesenchymal", "ADAMDEC1+ stromal_cl_17",
+      "ADAMDEC1+ stromal_cl_19", "NPY+ Stromal",
+      "Transitional Stromal C3+"
+    )
+  ),
+  macrophages_monocytes = list(
+    label = "Macrophages & monocytes",
+    type = "compartment",
+    cell_types = c(
+      "Macrophages_cl_34", "Macrophages_cl_14", "Macrophages_cl_2",
+      "Macrophages_cl_3", "Mast cell", "Monocytes"
+    )
+  )
+)
+
+normalise_cell_type_key <- function(x) {
+  x <- enc2utf8(as.character(x))
+  x <- gsub("\u00a0", " ", x, fixed = TRUE)
+  x <- gsub(
+    "[\u2018\u2019\u201a\u201b\u201c\u201d\u201e\u201f]", "", x,
+    perl = TRUE
+  )
+  transliterated <- iconv(x, from = "", to = "ASCII//TRANSLIT", sub = "")
+  transliterated[is.na(transliterated)] <- x[is.na(transliterated)]
+  transliterated <- gsub("[[:space:]]+", " ", transliterated)
+  tolower(trimws(transliterated))
+}
+
+collapse_manifest_values <- function(x) {
+  x <- sort(unique(as.character(x[!is.na(x) & nzchar(as.character(x))])))
+  if (length(x) == 0L) "" else paste(x, collapse = ";")
+}
+
+read_cell_type_column <- function(path, label) {
+  if (is.na(path) || !file.exists(path)) {
+    if (identical(label, "complete")) return(character())
+    stop(label, " input does not exist: ", path)
+  }
+  x <- utils::read.csv(
+    path,
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    fileEncoding = "UTF-8"
+  )
+  if (!"cell_type" %in% names(x)) {
+    stop(label, " input lacks a cell_type column: ", path)
+  }
+  as.character(x$cell_type)
+}
+
+resolve_script_path <- function() {
+  file_argument <- grep(
+    "^--file=", commandArgs(trailingOnly = FALSE), value = TRUE
+  )
+  if (length(file_argument) == 0L) {
+    stop("Batch mode must be run with Rscript, not source()")
+  }
+  normalizePath(sub("^--file=", "", file_argument[[1]]), mustWork = TRUE)
+}
+
+analysis_scope_id <- if (length(args) >= 6L && nzchar(args[[6]])) {
+  args[[6]]
+} else {
+  "all_scopes"
+}
+
+shared_similarity_cache_file <- if (
+  length(args) >= 7L && nzchar(args[[7]]) && toupper(args[[7]]) != "NA"
+) {
+  path.expand(args[[7]])
+} else {
+  NA_character_
+}
+
+if (identical(analysis_scope_id, "all_scopes")) {
+  output_root <- config$output_dir
+  dir.create(output_root, recursive = TRUE, showWarnings = FALSE)
+  scopes_root <- file.path(output_root, "scopes")
+  shared_cache_dir <- file.path(output_root, "_shared_cache")
+  dir.create(scopes_root, recursive = TRUE, showWarnings = FALSE)
+  dir.create(shared_cache_dir, recursive = TRUE, showWarnings = FALSE)
+
+  significant_cell_types <- read_cell_type_column(
+    config$significant_file, "significant"
+  )
+  complete_cell_types <- read_cell_type_column(
+    config$all_results_file, "complete"
+  )
+  available_cell_types <- sort(unique(c(
+    significant_cell_types, complete_cell_types
+  )))
+  available_cell_types <- available_cell_types[
+    !is.na(available_cell_types) & nzchar(trimws(available_cell_types))
+  ]
+
+  available_keys <- normalise_cell_type_key(available_cell_types)
+  collision_table <- split(available_cell_types, available_keys)
+  collision_table <- collision_table[
+    vapply(collision_table, function(z) length(unique(z)) > 1L, logical(1))
+  ]
+  if (length(collision_table) > 0L) {
+    stop(
+      "Cell-type normalisation is ambiguous for: ",
+      paste(names(collision_table), collapse = ", ")
+    )
+  }
+  available_lookup <- stats::setNames(available_cell_types, available_keys)
+
+  membership_rows <- list()
+  run_rows <- list()
+  for (scope_id in names(scope_definitions)) {
+    spec <- scope_definitions[[scope_id]]
+    requested <- if (identical(scope_id, "whole_atlas")) {
+      available_cell_types
+    } else {
+      spec$cell_types
+    }
+    requested_keys <- normalise_cell_type_key(requested)
+    matched <- unname(available_lookup[requested_keys])
+    present <- !is.na(matched)
+
+    membership_rows[[scope_id]] <- data.frame(
+      scope_id = scope_id,
+      scope_label = spec$label,
+      scope_type = spec$type,
+      requested_cell_type = requested,
+      requested_match_key = requested_keys,
+      matched_input_cell_type = ifelse(present, matched, NA_character_),
+      present_in_significant = ifelse(
+        present, matched %in% significant_cell_types, FALSE
+      ),
+      present_in_complete_results = ifelse(
+        present, matched %in% complete_cell_types, FALSE
+      ),
+      match_status = ifelse(present, "matched", "missing"),
+      stringsAsFactors = FALSE
+    )
+
+    matched_values <- unique(matched[present])
+    missing_values <- requested[!present]
+    n_significant_scope_rows <- sum(significant_cell_types %in% matched_values)
+    can_run <- length(matched_values) > 0L && n_significant_scope_rows > 0L
+    run_rows[[scope_id]] <- data.frame(
+      scope_id = scope_id,
+      scope_label = spec$label,
+      scope_type = spec$type,
+      status = if (can_run) "pending" else "skipped",
+      scope_completeness = if (
+        length(missing_values) == 0L
+      ) "complete" else "partial",
+      status_reason = if (can_run) {
+        "awaiting worker run"
+      } else if (length(matched_values) == 0L) {
+        "no requested cell populations were found in the inputs"
+      } else {
+        "no significant input rows were available for the matched populations"
+      },
+      output_dir = file.path(scopes_root, scope_id),
+      n_requested_cell_types = length(requested),
+      n_matched_cell_types = length(matched_values),
+      n_missing_cell_types = length(missing_values),
+      n_significant_input_rows = n_significant_scope_rows,
+      matched_cell_types = collapse_manifest_values(matched_values),
+      missing_cell_types = collapse_manifest_values(missing_values),
+      exit_status = NA_integer_,
+      final_unique_terms = NA_integer_,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  scope_membership <- do.call(rbind, membership_rows)
+  rownames(scope_membership) <- NULL
+  scope_manifest <- do.call(rbind, run_rows)
+  rownames(scope_manifest) <- NULL
+  utils::write.csv(
+    scope_membership,
+    file.path(output_root, "scope_cell_type_manifest.csv"),
+    row.names = FALSE,
+    na = ""
+  )
+  utils::write.csv(
+    scope_manifest,
+    file.path(output_root, "scope_run_manifest.csv"),
+    row.names = FALSE,
+    na = ""
+  )
+
+  assigned_compartment_cells <- unique(unlist(lapply(
+    scope_definitions[names(scope_definitions) != "whole_atlas"],
+    function(z) z$cell_types
+  )))
+  assigned_keys <- normalise_cell_type_key(assigned_compartment_cells)
+  unassigned <- available_cell_types[
+    !available_keys %in% assigned_keys
+  ]
+  utils::write.csv(
+    data.frame(cell_type = unassigned, stringsAsFactors = FALSE),
+    file.path(output_root, "unassigned_atlas_cell_types.csv"),
+    row.names = FALSE,
+    na = ""
+  )
+
+  if (identical(Sys.getenv("GO_ROLLUP_PLAN_ONLY"), "1")) {
+    message(
+      "Scope plan written without running workers because ",
+      "GO_ROLLUP_PLAN_ONLY=1: ", output_root
+    )
+    quit(save = "no", status = 0L)
+  }
+
+  script_path <- resolve_script_path()
+  rscript_path <- file.path(R.home("bin"), "Rscript")
+  shared_cache <- file.path(
+    shared_cache_dir,
+    paste0("semantic_similarity_", config$semantic_method, ".rds")
+  )
+
+  for (scope_id in names(scope_definitions)) {
+    manifest_index <- match(scope_id, scope_manifest$scope_id)
+    if (scope_manifest$status[[manifest_index]] == "skipped") next
+
+    scope_output <- scope_manifest$output_dir[[manifest_index]]
+    dir.create(scope_output, recursive = TRUE, showWarnings = FALSE)
+    worker_arguments <- c(
+      config$significant_file,
+      ifelse(is.na(config$all_results_file), "NA", config$all_results_file),
+      scope_output,
+      ifelse(is.na(config$go_id_mapping_file), "NA", config$go_id_mapping_file),
+      "NA", # Reserved argument 5 keeps older invocation positions compatible.
+      scope_id,
+      shared_cache
+    )
+    log_file <- file.path(scope_output, "rollup_console.log")
+    message("Running GO roll-up for ", scope_definitions[[scope_id]]$label, "...")
+    exit_status <- system2(
+      rscript_path,
+      args = c(shQuote(script_path), shQuote(worker_arguments)),
+      stdout = log_file,
+      stderr = log_file
+    )
+
+    scope_manifest$exit_status[[manifest_index]] <- exit_status
+    scope_manifest$status[[manifest_index]] <- if (
+      identical(as.integer(exit_status), 0L)
+    ) {
+      if (scope_manifest$n_missing_cell_types[[manifest_index]] > 0L) {
+        "completed_partial"
+      } else {
+        "completed"
+      }
+    } else {
+      "failed"
+    }
+    scope_manifest$status_reason[[manifest_index]] <- if (
+      identical(as.integer(exit_status), 0L)
+    ) {
+      if (scope_manifest$n_missing_cell_types[[manifest_index]] > 0L) {
+        "completed; one or more requested populations were absent"
+      } else {
+        "completed successfully"
+      }
+    } else {
+      "worker returned a non-zero exit status"
+    }
+
+    final_file <- file.path(
+      scope_output, "adaptive_go_final_significant_terms.csv"
+    )
+    if (identical(as.integer(exit_status), 0L) && file.exists(final_file)) {
+      scope_manifest$final_unique_terms[[manifest_index]] <- nrow(
+        utils::read.csv(final_file, stringsAsFactors = FALSE)
+      )
+    }
+    utils::write.csv(
+      scope_manifest,
+      file.path(output_root, "scope_run_manifest.csv"),
+      row.names = FALSE,
+      na = ""
+    )
+  }
+
+  failed_scopes <- scope_manifest$scope_id[scope_manifest$status == "failed"]
+  if (length(failed_scopes) > 0L) {
+    stop(
+      "One or more scope runs failed: ", paste(failed_scopes, collapse = ", "),
+      ". See each scope's rollup_console.log."
+    )
+  }
+  message(
+    "All available GO roll-up scopes complete: ", output_root,
+    "\nRun manifest: scope_run_manifest.csv",
+    "\nCell-type audit: scope_cell_type_manifest.csv"
+  )
+  quit(save = "no", status = 0L)
+}
+
+if (!analysis_scope_id %in% names(scope_definitions)) {
+  stop(
+    "Unknown worker scope '", analysis_scope_id, "'. Expected one of: ",
+    paste(names(scope_definitions), collapse = ", ")
+  )
+}
+
+config$analysis_scope <- analysis_scope_id
+config$analysis_scope_label <- scope_definitions[[analysis_scope_id]]$label
+config$analysis_scope_type <- scope_definitions[[analysis_scope_id]]$type
+config$shared_similarity_cache_file <- shared_similarity_cache_file
 
 # These are deliberately excluded as uninformative roll-up labels.
 uninformative_parent_ids <- c(
   "GO:0008150", # biological_process
   "GO:0009987", # cellular process
   "GO:0065007"  # biological regulation
-)
-
-# Built-in defaults can be replaced with priority_file. Multiple roots can share
-# a custom display theme without being claimed to share a GO parent.
-default_priority_branches <- data.frame(
-  theme = c(
-    "Extracellular matrix organization",
-    "Extracellular matrix organization",
-    "Collagen turnover",
-    "Collagen turnover",
-    "Fibroblast activation and expansion",
-    "Fibroblast activation and expansion",
-    "Fibroblast activation and expansion",
-    "Fibroblast activation and expansion",
-    "Fibroblast activation and expansion",
-    "TGF-beta response and signalling",
-    "TGF-beta response and signalling",
-    "TGF-beta response and signalling",
-    "Wound healing and tissue repair",
-    "Wound healing and tissue repair",
-    "Cell-matrix adhesion and mechanotransduction",
-    "Cell-matrix adhesion and mechanotransduction",
-    "Cell-matrix adhesion and mechanotransduction"
-  ),
-  root_go_id = c(
-    "GO:0030198",
-    "GO:1903053",
-    "GO:0032963",
-    "GO:0010712",
-    "GO:0072537",
-    "GO:0048144",
-    "GO:0048145",
-    "GO:0036446",
-    "GO:1904760",
-    "GO:0071559",
-    "GO:0007179",
-    "GO:0017015",
-    "GO:0042060",
-    "GO:0061041",
-    "GO:0031589",
-    "GO:0010810",
-    "GO:0009612"
-  ),
-  max_granular = rep(3L, 17),
-  stringsAsFactors = FALSE
 )
 
 # -----------------------------------------------------------------------------
@@ -409,6 +713,158 @@ if (any(is.na(significant_input$collection) |
 if (any(is.na(all_results$collection) | all_results$collection != "GO_BP")) {
   stop("The complete-results input must contain GO_BP results only")
 }
+
+# Resolve and apply the scope before selecting candidate terms. This is what
+# makes recurrence, profile similarity, semantic representatives, roll-ups and
+# the final hierarchy antichain specific to the current compartment.
+available_cell_types <- sort(unique(c(
+  as.character(significant_input$cell_type),
+  as.character(all_results$cell_type)
+)))
+available_keys <- normalise_cell_type_key(available_cell_types)
+collision_table <- split(available_cell_types, available_keys)
+collision_table <- collision_table[
+  vapply(collision_table, function(z) length(unique(z)) > 1L, logical(1))
+]
+if (length(collision_table) > 0L) {
+  stop(
+    "Cell-type normalisation is ambiguous for: ",
+    paste(names(collision_table), collapse = ", ")
+  )
+}
+available_lookup <- stats::setNames(available_cell_types, available_keys)
+
+requested_cell_types <- if (identical(config$analysis_scope, "whole_atlas")) {
+  available_cell_types
+} else {
+  scope_definitions[[config$analysis_scope]]$cell_types
+}
+requested_keys <- normalise_cell_type_key(requested_cell_types)
+matched_cell_types <- unname(available_lookup[requested_keys])
+matched_flags <- !is.na(matched_cell_types)
+included_cell_types <- sort(unique(matched_cell_types[matched_flags]))
+missing_cell_types <- requested_cell_types[!matched_flags]
+
+if (length(included_cell_types) == 0L) {
+  stop(
+    "No requested cell populations were found for scope ",
+    config$analysis_scope, " (", config$analysis_scope_label, ")"
+  )
+}
+
+scope_membership_audit <- tibble(
+  scope_id = config$analysis_scope,
+  scope_label = config$analysis_scope_label,
+  scope_type = config$analysis_scope_type,
+  requested_cell_type = requested_cell_types,
+  requested_match_key = requested_keys,
+  matched_input_cell_type = ifelse(
+    matched_flags, matched_cell_types, NA_character_
+  ),
+  present_in_significant = ifelse(
+    matched_flags,
+    matched_cell_types %in% unique(significant_input$cell_type),
+    FALSE
+  ),
+  present_in_complete_results = ifelse(
+    matched_flags,
+    matched_cell_types %in% unique(all_results$cell_type),
+    FALSE
+  ),
+  match_status = ifelse(matched_flags, "matched", "missing")
+)
+readr::write_csv(
+  scope_membership_audit,
+  file.path(config$output_dir, "scope_cell_type_audit.csv")
+)
+
+significant_input <- significant_input |>
+  filter(normalise_cell_type_key(cell_type) %in%
+           normalise_cell_type_key(included_cell_types))
+all_results <- all_results |>
+  filter(normalise_cell_type_key(cell_type) %in%
+           normalise_cell_type_key(included_cell_types))
+
+if (nrow(significant_input) == 0L) {
+  stop(
+    "The scope contains no significant input rows: ",
+    config$analysis_scope, " (", config$analysis_scope_label, ")"
+  )
+}
+if (nrow(all_results) == 0L) {
+  stop(
+    "The scope contains no complete-result rows: ",
+    config$analysis_scope, " (", config$analysis_scope_label, ")"
+  )
+}
+
+if (length(missing_cell_types) > 0L) {
+  warning(
+    "Scope ", config$analysis_scope_label,
+    " is partial. Requested populations not present in the input: ",
+    paste(missing_cell_types, collapse = ", ")
+  )
+}
+
+# Retain the atlas-wide four-cell minimum in every scope. Correlation based on
+# only two or three cell populations is unstable, so small compartments leave
+# profile correlation unavailable and rely on semantic and leading-edge
+# evidence instead of silently relaxing the original criterion.
+
+config$requested_cell_types <- requested_cell_types
+config$included_cell_types <- included_cell_types
+config$missing_cell_types <- missing_cell_types
+config$scope_completeness <- if (
+  length(missing_cell_types) == 0L
+) "complete" else "partial"
+
+write_scope_metadata <- function(
+  status,
+  n_candidate_pathways = NA_integer_,
+  n_final_unique_terms = NA_integer_,
+  n_final_by_cell_rows = NA_integer_
+) {
+  metadata <- tibble(
+    scope_id = config$analysis_scope,
+    scope_label = config$analysis_scope_label,
+    scope_type = config$analysis_scope_type,
+    scope_completeness = config$scope_completeness,
+    status = status,
+    requested_cell_types = collapse_manifest_values(
+      config$requested_cell_types
+    ),
+    included_cell_types = collapse_manifest_values(
+      config$included_cell_types
+    ),
+    missing_cell_types = collapse_manifest_values(
+      config$missing_cell_types
+    ),
+    n_requested_cell_types = length(config$requested_cell_types),
+    n_included_cell_types = length(config$included_cell_types),
+    n_missing_cell_types = length(config$missing_cell_types),
+    n_significant_input_rows = nrow(significant_input),
+    n_complete_result_rows = nrow(all_results),
+    n_candidate_pathways = n_candidate_pathways,
+    n_final_unique_terms = n_final_unique_terms,
+    n_final_by_cell_rows = n_final_by_cell_rows,
+    min_shared_cell_types_for_correlation =
+      config$min_shared_cell_types_for_correlation
+  )
+  readr::write_csv(
+    metadata,
+    file.path(config$output_dir, "run_scope_metadata.csv")
+  )
+  invisible(metadata)
+}
+
+write_scope_metadata("running")
+
+message(
+  "Analysis scope: ", config$analysis_scope_label,
+  " [", config$analysis_scope, "]",
+  "\nIncluded cell populations (", length(included_cell_types), "): ",
+  paste(included_cell_types, collapse = ", ")
+)
 
 contrast_table <- bind_rows(
   significant_input |>
@@ -901,99 +1357,12 @@ term_metrics <- term_metrics |>
   )
 
 # -----------------------------------------------------------------------------
-# Priority-branch membership
+# Evidence-based representative scoring
 # -----------------------------------------------------------------------------
 
-if (!is.na(config$priority_file) && file.exists(config$priority_file)) {
-  priority_branches <- readr::read_csv(
-    config$priority_file,
-    show_col_types = FALSE,
-    progress = FALSE
-  )
-  missing_priority_columns <- setdiff(
-    c("theme", "root_go_id", "max_granular"), names(priority_branches)
-  )
-  if (length(missing_priority_columns) > 0) {
-    stop(
-      "Priority file is missing: ",
-      paste(missing_priority_columns, collapse = ", ")
-    )
-  }
-} else {
-  priority_branches <- as_tibble(default_priority_branches)
-}
-
-priority_branches <- priority_branches |>
-  mutate(max_granular = as.integer(max_granular)) |>
-  left_join(
-    go_meta |> select(root_go_id = go_id, root_go_term = go_term),
-    by = "root_go_id"
-  )
-
-if (any(is.na(priority_branches$theme) | priority_branches$theme == "") ||
-    any(is.na(priority_branches$root_go_id)) ||
-    any(is.na(priority_branches$max_granular) |
-        priority_branches$max_granular < 1L |
-        priority_branches$max_granular >
-          config$hard_max_granular_per_cluster)) {
-  stop(
-    "Each priority row needs a theme, GO root, and max_granular between 1 and ",
-    config$hard_max_granular_per_cluster
-  )
-}
-
-if (any(is.na(priority_branches$root_go_term))) {
-  warning(
-    "Some priority roots are absent from this GO.db version; see ",
-    "priority_branches_used.csv"
-  )
-}
-
-readr::write_csv(
-  priority_branches,
-  file.path(config$output_dir, "priority_branches_used.csv")
-)
-
-assign_priority <- function(go_id) {
-  lineage <- unique(c(go_id, candidate_ancestors[[go_id]]))
-  hits <- priority_branches |>
-    filter(root_go_id %in% lineage, !is.na(root_go_term))
-
-  if (nrow(hits) == 0) {
-    return(tibble(
-      go_id = go_id,
-      priority_branch = FALSE,
-      priority_root_go_id = NA_character_,
-      priority_theme = NA_character_,
-      all_priority_themes = NA_character_,
-      max_granular = config$default_max_granular_per_cluster
-    ))
-  }
-
-  hit_depths <- map_dfr(hits$root_go_id, function(id) {
-    d <- get_depth_range(id)
-    tibble(root_go_id = id, root_depth = mean(d, na.rm = TRUE))
-  })
-  hits <- hits |>
-    left_join(hit_depths, by = "root_go_id") |>
-    arrange(desc(root_depth), root_go_id)
-  chosen <- hits[1, ]
-
-  tibble(
-    go_id = go_id,
-    priority_branch = TRUE,
-    priority_root_go_id = chosen$root_go_id,
-    priority_theme = chosen$theme,
-    all_priority_themes = paste(sort(unique(hits$theme)), collapse = ";"),
-    max_granular = chosen$max_granular
-  )
-}
-
-priority_membership <- map_dfr(candidate_ids, assign_priority)
-term_metrics <- term_metrics |>
-  left_join(priority_membership, by = "go_id")
-
 # Presentation score chooses representatives. It is not a statistical test.
+# Every GO branch uses the same evidence, recurrence and information-content
+# weights; no named branch or biological topic receives a score adjustment.
 term_metrics <- term_metrics |>
   mutate(
     capped_log_q = pmin(-log10(pmax(best_q, 1e-300)), 20),
@@ -1001,8 +1370,7 @@ term_metrics <- term_metrics |>
       0.40 * rescale_01(capped_log_q) +
       0.25 * rescale_01(pmin(max_abs_nes, 3)) +
       0.15 * rescale_01(log1p(n_significant_cell_types)) +
-      0.20 * rescale_01(information_content) +
-      ifelse(priority_branch, 2, 0)
+      0.20 * rescale_01(information_content)
   )
 
 # -----------------------------------------------------------------------------
@@ -1014,27 +1382,57 @@ message(
   " candidate GO terms..."
 )
 
-similarity_cache_file <- file.path(
+local_similarity_cache_file <- file.path(
   config$output_dir,
   paste0("semantic_similarity_", config$semantic_method, ".rds")
 )
 
+cache_candidates <- unique(c(
+  if (!is.na(config$shared_similarity_cache_file)) {
+    config$shared_similarity_cache_file
+  } else {
+    character()
+  },
+  local_similarity_cache_file
+))
+
 cache_is_valid <- FALSE
-if (config$cache_similarity_matrix && file.exists(similarity_cache_file)) {
-  cached <- readRDS(similarity_cache_file)
-  cache_is_valid <- is.list(cached) &&
-    identical(cached$ids, candidate_ids) &&
-    identical(cached$method, config$semantic_method) &&
-    identical(cached$go_db_version, as.character(packageVersion("GO.db"))) &&
-    identical(
-      cached$gosemsim_version, as.character(packageVersion("GOSemSim"))
-    ) &&
-    identical(
-      cached$org_db_version, as.character(packageVersion("org.Hs.eg.db"))
+cache_source_file <- NA_character_
+if (config$cache_similarity_matrix) {
+  for (candidate_cache_file in cache_candidates) {
+    if (!file.exists(candidate_cache_file)) next
+    cached <- tryCatch(
+      readRDS(candidate_cache_file),
+      error = function(e) NULL
     )
-  if (cache_is_valid) {
-    semantic_similarity <- cached$similarity
-    message("Using cached semantic-similarity matrix")
+    cached_ids <- if (is.list(cached)) as.character(cached$ids) else character()
+    cached_matrix <- if (is.list(cached)) cached$similarity else NULL
+    cache_is_valid <- is.list(cached) &&
+      identical(cached$method, config$semantic_method) &&
+      identical(cached$go_db_version, as.character(packageVersion("GO.db"))) &&
+      identical(
+        cached$gosemsim_version, as.character(packageVersion("GOSemSim"))
+      ) &&
+      identical(
+        cached$org_db_version, as.character(packageVersion("org.Hs.eg.db"))
+      ) &&
+      is.matrix(cached_matrix) &&
+      all(candidate_ids %in% cached_ids) &&
+      all(candidate_ids %in% rownames(cached_matrix)) &&
+      all(candidate_ids %in% colnames(cached_matrix))
+    if (cache_is_valid) {
+      semantic_similarity <- cached_matrix[
+        candidate_ids, candidate_ids, drop = FALSE
+      ]
+      cache_source_file <- candidate_cache_file
+      message(
+        "Using cached semantic-similarity matrix (",
+        length(cached_ids), " cached GO IDs; ",
+        length(candidate_ids), " used in this scope): ",
+        candidate_cache_file
+      )
+      break
+    }
   }
 }
 
@@ -1062,6 +1460,19 @@ if (!cache_is_valid) {
   diag(semantic_similarity) <- 1
 
   if (config$cache_similarity_matrix) {
+    # The whole-atlas matrix is a reusable superset. A compartment that has to
+    # recompute writes only its local cache and never replaces that superset.
+    similarity_cache_file <- if (
+      identical(config$analysis_scope, "whole_atlas") &&
+        !is.na(config$shared_similarity_cache_file)
+    ) {
+      config$shared_similarity_cache_file
+    } else {
+      local_similarity_cache_file
+    }
+    dir.create(
+      dirname(similarity_cache_file), recursive = TRUE, showWarnings = FALSE
+    )
     saveRDS(
       list(
         ids = candidate_ids,
@@ -1074,6 +1485,7 @@ if (!cache_is_valid) {
       similarity_cache_file,
       compress = FALSE
     )
+    cache_source_file <- similarity_cache_file
   }
 }
 
@@ -1404,22 +1816,10 @@ term_metrics <- term_metrics |>
       (leading_edge_similarity_available & !leading_edge_concordant),
     direction_stratum = dominant_direction
   ) |>
-  group_by(semantic_representative, priority_theme, direction_stratum) |>
-  arrange(desc(priority_branch), desc(presentation_score), .by_group = TRUE) |>
   mutate(
-    priority_rank_in_cluster = ifelse(
-      priority_branch, cumsum(priority_branch), NA_integer_
-    ),
-    keep_granular = priority_branch & evidence_pass &
+    keep_granular = evidence_pass &
       (
-        priority_rank_in_cluster <= max_granular |
-        (
-          (signal_distinct_from_representative | similarity_uncertain) &
-            priority_rank_in_cluster <= config$hard_max_granular_per_cluster
-        )
-      ),
-    keep_distinct_peripheral = !priority_branch & evidence_pass &
-      (
+        go_id == semantic_representative |
         signal_distinct_from_representative |
         similarity_uncertain |
         !redundancy_supported
@@ -1428,11 +1828,12 @@ term_metrics <- term_metrics |>
   ungroup()
 
 # -----------------------------------------------------------------------------
-# Choose true common ancestors for peripheral semantic clusters
+# Choose true common ancestors for semantic clusters
 # -----------------------------------------------------------------------------
 
 choose_common_ancestor <- function(member_ids) {
   member_ids <- unique(member_ids)
+  if (length(member_ids) == 0L) return(NA_character_)
   lineages <- lapply(member_ids, get_ancestors)
   common <- Reduce(intersect, lineages)
   common <- setdiff(common, uninformative_parent_ids)
@@ -1473,7 +1874,7 @@ choose_common_ancestor <- function(member_ids) {
 }
 
 cluster_ancestors <- term_metrics |>
-  filter(!priority_branch, !keep_distinct_peripheral) |>
+  filter(!keep_granular) |>
   group_by(semantic_representative, direction_stratum) |>
   summarise(
     cluster_common_ancestor = choose_common_ancestor(go_id),
@@ -1481,11 +1882,10 @@ cluster_ancestors <- term_metrics |>
     .groups = "drop"
   )
 
-# A separate fallback is calculated across every peripheral semantic cluster.
+# A separate fallback is calculated across every semantic cluster.
 # It does not alter the audit/display mapping above; it is used only when a
 # term lacks sufficient evidence to be shown granularly in a particular cell.
 fallback_cluster_ancestors <- term_metrics |>
-  filter(!priority_branch) |>
   group_by(semantic_representative, direction_stratum) |>
   summarise(
     fallback_common_ancestor = choose_common_ancestor(go_id),
@@ -1520,41 +1920,30 @@ term_metrics <- term_metrics |>
 display_mapping <- term_metrics |>
   mutate(
     display_go_id = case_when(
-      keep_granular | keep_distinct_peripheral ~ go_id,
-      priority_branch ~ priority_root_go_id,
+      keep_granular ~ go_id,
       !is.na(cluster_common_ancestor) ~ cluster_common_ancestor,
       TRUE ~ semantic_representative
     ),
     mapping_type = case_when(
       keep_granular ~ "granular_self",
-      keep_distinct_peripheral ~ "distinct_peripheral_self",
-      priority_branch & go_id == priority_root_go_id ~ "priority_root_self",
-      priority_branch ~ "priority_branch_rollup",
       !is.na(cluster_common_ancestor) ~ "ontology_ancestor",
       TRUE ~ "semantic_representative"
     ),
     granularity = ifelse(
-      keep_granular | keep_distinct_peripheral, "granular", "high_level"
+      keep_granular, "granular", "high_level"
     ),
     coarse_display_go_id = case_when(
-      priority_branch & !is.na(priority_root_go_id) ~ priority_root_go_id,
-      !priority_branch & !is.na(fallback_common_ancestor) ~
-        fallback_common_ancestor,
+      !is.na(fallback_common_ancestor) ~ fallback_common_ancestor,
       !is.na(individual_rollup_ancestor) ~ individual_rollup_ancestor,
       TRUE ~ semantic_representative
     ),
     coarse_mapping_type = case_when(
-      priority_branch & !is.na(priority_root_go_id) ~
-        "priority_branch_rollup",
-      !priority_branch & !is.na(fallback_common_ancestor) ~
-        "ontology_ancestor",
+      !is.na(fallback_common_ancestor) ~ "ontology_ancestor",
       !is.na(individual_rollup_ancestor) ~ "ontology_ancestor",
       TRUE ~ "semantic_representative"
     ),
     coarse_rollup_source = case_when(
-      priority_branch & !is.na(priority_root_go_id) ~ "priority_root",
-      !priority_branch & !is.na(fallback_common_ancestor) ~
-        "cluster_common_ancestor",
+      !is.na(fallback_common_ancestor) ~ "cluster_common_ancestor",
       !is.na(individual_rollup_ancestor) ~ "individual_ancestor",
       TRUE ~ "semantic_representative"
     ),
@@ -1565,47 +1954,29 @@ display_mapping <- term_metrics |>
         !is.na(coarse_id) & coarse_id %in% get_ancestors(member_id)
       }
     ),
-    theme_type = ifelse(
-      priority_branch, "custom_fibrosis_priority", NA_character_
-    ),
     rollup_basis = case_when(
-      keep_granular ~ "priority_granular_retention",
-      keep_distinct_peripheral ~ "distinct_or_uncertain_retention",
+      keep_granular ~ "distinct_or_uncertain_retention",
       !evidence_pass ~ "low_granular_evidence",
       redundancy_supported ~ "redundancy_supported",
-      priority_branch ~ "priority_rank_cap",
       TRUE ~ "review_required"
     ),
     decision_reason = case_when(
-      keep_granular & signal_distinct_from_representative ~
-        "priority branch; evidence passed; distinct NES/leading-edge pattern",
+      keep_granular & go_id == semantic_representative ~
+        "evidence-supported representative retained as a granular candidate",
+      keep_granular & similarity_uncertain ~
+        "term retained because redundancy evidence was insufficient",
       keep_granular ~
-        "priority branch; evidence passed; top-ranked within semantic cluster",
-      keep_distinct_peripheral & similarity_uncertain ~
-        "peripheral term retained because redundancy evidence was insufficient",
-      keep_distinct_peripheral ~
-        "peripheral term retained because its NES or leading-edge pattern differed",
-      priority_branch & go_id == priority_root_go_id ~
-        "term is itself the configured high-level priority root",
-      priority_branch & !evidence_pass ~
-        "priority term rolled to its root because granular evidence did not pass",
-      priority_branch & redundancy_supported ~
-        "priority term was redundant and below the granular retention rank",
-      priority_branch &
-        (signal_distinct_from_representative | similarity_uncertain) ~
-        "priority term was distinct or uncertain but exceeded the hard rank cap",
-      priority_branch ~
-        "priority term exceeded the granular retention rank",
+        "term retained because its NES or leading-edge pattern differed",
       !evidence_pass & !is.na(cluster_common_ancestor) ~
         paste(
-          "peripheral term with low granular evidence moved to a strict",
+          "term with low granular evidence moved to a strict",
           "GO ancestor; this is a presentation roll-up, not redundancy evidence"
         ),
       !is.na(cluster_common_ancestor) ~
-        "peripheral semantic cluster collapsed to a verified common GO ancestor",
+        "semantic cluster collapsed to a verified common GO ancestor",
       !evidence_pass ~
         paste(
-          "low-granular-evidence peripheral term grouped by semantic label;",
+          "low-granular-evidence term grouped by semantic label;",
           "review because no informative strict common ancestor was available"
         ),
       TRUE ~
@@ -1634,7 +2005,6 @@ display_mapping <- term_metrics |>
     ),
     display_key = paste(
       mapping_type,
-      ifelse(is.na(priority_theme), "", priority_theme),
       direction_stratum,
       semantic_representative,
       display_go_id,
@@ -1642,12 +2012,12 @@ display_mapping <- term_metrics |>
     )
   )
 
-# Assert that every claimed ontology/priority roll-up is genuinely ancestral.
+# Assert that every claimed ontology roll-up is genuinely ancestral.
 ancestry_check <- pmap_lgl(
   display_mapping |>
     select(go_id, display_go_id, mapping_type),
   function(go_id, display_go_id, mapping_type) {
-    if (!mapping_type %in% c("ontology_ancestor", "priority_branch_rollup")) {
+    if (mapping_type != "ontology_ancestor") {
       return(TRUE)
     }
     display_go_id %in% get_ancestors(go_id)
@@ -1680,7 +2050,7 @@ tested_go_ids <- all_results_mapped |>
 
 display_sources <- display_mapping |>
   group_by(
-    display_key, display_go_id, display_term, mapping_type, priority_theme,
+    display_key, display_go_id, display_term, mapping_type,
     direction_stratum
   ) |>
   arrange(
@@ -1735,7 +2105,7 @@ display_mapping <- display_mapping |>
 # -----------------------------------------------------------------------------
 
 readr::write_csv(
-  term_metrics |> arrange(desc(priority_branch), best_q),
+  term_metrics |> arrange(best_q, desc(presentation_score), go_id),
   file.path(config$output_dir, "go_term_metrics.csv")
 )
 
@@ -1749,8 +2119,6 @@ mapping_output <- display_mapping |>
     pathway, go_id, go_term, min_depth, max_depth, information_content,
     dominant_direction, direction_consistency, direction_stratum,
     n_granular_evidence_cell_types,
-    priority_branch, priority_theme, all_priority_themes, theme_type,
-    priority_root_go_id, max_granular,
     rrvgo_representative, semantic_representative,
     semantic_similarity_to_representative,
     representative_stable, profile_correlation,
@@ -1760,7 +2128,6 @@ mapping_output <- display_mapping |>
     profile_concordant, leading_edge_concordant, redundancy_supported,
     similarity_uncertain, signal_distinct_from_representative,
     evidence_pass, presentation_score, keep_granular,
-    keep_distinct_peripheral,
     display_key, display_go_id, display_term,
     mapping_type, granularity, rollup_basis, decision_reason,
     cluster_common_ancestor, fallback_common_ancestor,
@@ -1784,12 +2151,12 @@ annotated_results <- all_results_mapped |>
   left_join(
     mapping_output |>
       select(
-        go_id, priority_theme, theme_type, direction_stratum, display_key,
+        go_id, direction_stratum, display_key,
         display_go_id, display_term, mapping_type, granularity,
         rollup_basis, decision_reason, source_go_id, source_term, source_type,
-        n_collapsed_terms, keep_granular, keep_distinct_peripheral,
+        n_collapsed_terms, keep_granular,
         min_depth, max_depth, information_content, semantic_representative,
-        priority_branch, max_granular, presentation_score,
+        presentation_score,
         signal_distinct_from_representative,
         coarse_display_go_id, coarse_display_term, coarse_mapping_type,
         coarse_rollup_source, coarse_is_strict_ancestor
@@ -1904,7 +2271,7 @@ readr::write_csv(
 # every displayed term has explicit evidence provenance. A member is shown at
 # its own GO ID only when it passes the row-level granular evidence rule and
 # was selected for granular retention. Otherwise it is moved to the best
-# available priority root or verified ontology ancestor; semantic grouping is
+# available verified ontology ancestor; semantic grouping is
 # used only when no informative strict ancestor exists.
 final_member_rows_raw <- annotated_results |>
   filter(
@@ -1940,21 +2307,12 @@ final_member_evidence <- final_member_rows_raw |>
     granular_candidate_here = granular_evidence_pass_row &
       is.finite(min_depth) &
       min_depth >= config$final_granular_min_depth &
+      coalesce(keep_granular, FALSE) &
+      evidence_q <= config$final_granular_fdr &
+      abs(NES) >= config$final_granular_min_abs_nes &
       (
-        (
-          coalesce(priority_branch, FALSE) &
-            coalesce(keep_granular, FALSE)
-        ) |
-          (
-            !coalesce(priority_branch, FALSE) &
-              coalesce(keep_distinct_peripheral, FALSE) &
-              evidence_q <= config$final_granular_fdr &
-              abs(NES) >= config$final_granular_min_abs_nes &
-              (
-                go_id == semantic_representative |
-                  coalesce(signal_distinct_from_representative, FALSE)
-              )
-          )
+        go_id == semantic_representative |
+          coalesce(signal_distinct_from_representative, FALSE)
       )
   )
 
@@ -1967,13 +2325,10 @@ global_granular_selection <- final_member_evidence |>
   group_by(
     member_direction,
     semantic_representative,
-    priority_theme,
     go_id,
     go_term
   ) |>
   summarise(
-    priority_branch = any(coalesce(priority_branch, FALSE)),
-    max_granular = safe_max(max_granular),
     selection_max_depth = safe_max(max_depth),
     selection_information_content = safe_max(information_content),
     selection_presentation_score = safe_max(presentation_score),
@@ -1982,13 +2337,8 @@ global_granular_selection <- final_member_evidence |>
     largest_candidate_abs_NES = safe_max(abs(NES)),
     .groups = "drop"
   ) |>
-  group_by(
-    member_direction,
-    semantic_representative,
-    priority_theme
-  ) |>
+  group_by(member_direction, semantic_representative) |>
   arrange(
-    desc(coalesce(priority_branch, FALSE)),
     desc(selection_max_depth),
     desc(selection_information_content),
     desc(n_candidate_cell_types),
@@ -2000,18 +2350,7 @@ global_granular_selection <- final_member_evidence |>
   ) |>
   mutate(
     global_granular_rank = row_number(),
-    global_granular_limit = if (any(coalesce(priority_branch, FALSE))) {
-      valid_limits <- max_granular[
-        coalesce(priority_branch, FALSE) & is.finite(max_granular)
-      ]
-      if (length(valid_limits) == 0) {
-        config$default_max_granular_per_cluster
-      } else {
-        max(valid_limits)
-      }
-    } else {
-      config$final_max_peripheral_per_cluster
-    },
+    global_granular_limit = config$final_max_granular_per_cluster,
     global_granular_selected =
       global_granular_rank <= global_granular_limit
   ) |>
@@ -2022,7 +2361,6 @@ readr::write_csv(
     arrange(
       member_direction,
       semantic_representative,
-      priority_theme,
       global_granular_rank,
       go_id
     ),
@@ -2038,7 +2376,6 @@ final_member_rows <- final_member_evidence |>
       select(
         member_direction,
         semantic_representative,
-        priority_theme,
         go_id,
         global_granular_rank,
         global_granular_limit,
@@ -2050,7 +2387,6 @@ final_member_rows <- final_member_evidence |>
     by = c(
       "member_direction",
       "semantic_representative",
-      "priority_theme",
       "go_id"
     )
   ) |>
@@ -2062,12 +2398,7 @@ final_member_rows <- final_member_evidence |>
     granular_display_here =
       granular_candidate_here & global_granular_selected
   ) |>
-  group_by(
-    cell_type,
-    member_direction,
-    semantic_representative,
-    priority_theme
-  ) |>
+  group_by(cell_type, member_direction, semantic_representative) |>
   mutate(
     cluster_has_granular_display = any(granular_display_here),
     cluster_go_ids = collapse_unique_text(go_id),
@@ -2086,10 +2417,7 @@ final_member_rows <- final_member_evidence |>
     ),
     direct_display_evidence = go_id == final_display_go_id,
     final_mapping_type = case_when(
-      granular_display_here & coalesce(keep_granular, FALSE) ~
-        "granular_self",
-      granular_display_here & coalesce(keep_distinct_peripheral, FALSE) ~
-        "distinct_peripheral_self",
+      granular_display_here ~ "granular_self",
       direct_display_evidence ~ "direct_self",
       !is.na(coarse_mapping_type) ~ coarse_mapping_type,
       TRUE ~ mapping_type
@@ -2186,7 +2514,6 @@ cell_term_summary <- final_member_rows |>
     ),
     mapping_types = collapse_unique_text(final_mapping_type),
     rollup_sources = collapse_unique_text(final_rollup_source),
-    priority_themes = collapse_unique_text(priority_theme),
     has_direct_display_evidence = any(direct_display_evidence),
     has_granular_display_evidence = any(
       granular_display_here & direct_display_evidence
@@ -2308,6 +2635,12 @@ cell_term_summary_all <- cell_term_summary |>
 
 final_by_cell <- cell_term_summary_all |>
   filter(!hierarchy_parent_removed) |>
+  mutate(
+    scope_id = config$analysis_scope,
+    scope_label = config$analysis_scope_label,
+    scope_completeness = config$scope_completeness,
+    .before = 1
+  ) |>
   arrange(
     cell_type,
     desc(resolution == "granular"),
@@ -2345,7 +2678,7 @@ readr::write_csv(
 # Aggregate the cell-specific frontier to one row per GO term. This is the
 # designated final result for reporting: exact GO IDs are unique, directions
 # and cell populations are retained in explicit list/count fields, and a final
-# global antichain removes any parent whose retained child appears elsewhere.
+# scope-wide antichain removes any parent whose retained child appears elsewhere.
 final_by_cell <- final_by_cell |>
   mutate(
     cell_evidence = sprintf(
@@ -2427,7 +2760,6 @@ global_term_summary <- final_by_cell |>
     selected_granular_go_ids = collapse_delimited_values(
       selected_granular_go_ids
     ),
-    priority_themes = collapse_delimited_values(priority_themes),
     mapping_types = collapse_delimited_values(mapping_types),
     rollup_sources = collapse_delimited_values(rollup_sources),
     best_member_q_value = safe_min(best_member_q_value),
@@ -2459,8 +2791,13 @@ global_term_summary_all <- global_term_summary |>
 final_significant_terms <- global_term_summary_all |>
   filter(!hierarchy_parent_removed) |>
   select(-hierarchy_parent_removed, -retained_descendant_go_ids) |>
+  mutate(
+    scope_id = config$analysis_scope,
+    scope_label = config$analysis_scope_label,
+    scope_completeness = config$scope_completeness,
+    .before = 1
+  ) |>
   arrange(
-    desc(!is.na(priority_themes)),
     desc(resolution == "granular"),
     best_member_q_value,
     desc(largest_member_abs_NES),
@@ -2507,13 +2844,13 @@ global_pruning_audit <- global_term_summary_all |>
   filter(hierarchy_parent_removed) |>
   transmute(
     pruning_scope = "global_unique_list",
-    context = "all_cell_types",
+    context = config$analysis_scope,
     removed_go_id = display_go_id,
     removed_term = display_term,
     retained_descendant_go_ids,
     removal_reason = paste(
       "A more specific significant display term connected by strict is_a",
-      "or part_of ancestry was retained in the final cross-cell-type list"
+      "or part_of ancestry was retained in the final scope-wide list"
     ),
     n_significant_cell_types,
     significant_cell_types,
@@ -2539,16 +2876,11 @@ nes_matrix_output <- adaptive_summary |>
   mutate(
     display_label = paste0(
       display_term, " (", display_go_id, ")",
-      ifelse(
-        is.na(priority_theme) | priority_theme == "",
-        "",
-        paste0(" [", priority_theme, "]")
-      ),
       " {", direction_stratum, "}"
     )
   ) |>
   select(
-    display_key, display_go_id, display_term, mapping_type, priority_theme,
+    display_key, display_go_id, display_term, mapping_type,
     direction_stratum, source_go_id, source_type, display_label, cell_type,
     source_NES
   ) |>
@@ -2561,7 +2893,7 @@ readr::write_csv(
 
 source_q_matrix_output <- adaptive_summary |>
   select(
-    display_key, display_go_id, display_term, mapping_type, priority_theme,
+    display_key, display_go_id, display_term, mapping_type,
     direction_stratum, source_go_id, source_type, cell_type, source_q_value
   ) |>
   tidyr::pivot_wider(names_from = cell_type, values_from = source_q_value)
@@ -2573,7 +2905,7 @@ readr::write_csv(
 
 collapse_qc <- mapping_output |>
   group_by(
-    display_key, display_go_id, display_term, mapping_type, priority_theme,
+    display_key, display_go_id, display_term, mapping_type,
     direction_stratum, source_go_id, source_term, source_type
   ) |>
   summarise(
@@ -2634,9 +2966,7 @@ reduction_counts <- tibble(
     "mapped_candidate_pathways",
     "omitted_candidate_pathways_mapping",
     "mapped_candidate_go_ids",
-    "priority_candidate_terms",
-    "granular_priority_terms_retained",
-    "distinct_peripheral_terms_retained",
+    "granular_terms_retained_in_display_mapping",
     "terms_rolled_up",
     "display_groups",
     "adaptive_summary_grid_rows",
@@ -2660,14 +2990,8 @@ reduction_counts <- tibble(
     sum(candidate_mapping$mapping_status == "mapped"),
     omitted_candidate_pathways,
     length(candidate_ids),
-    sum(term_metrics$priority_branch, na.rm = TRUE),
     sum(display_mapping$keep_granular, na.rm = TRUE),
-    sum(display_mapping$keep_distinct_peripheral, na.rm = TRUE),
-    sum(
-      !display_mapping$keep_granular &
-        !display_mapping$keep_distinct_peripheral,
-      na.rm = TRUE
-    ),
+    sum(!display_mapping$keep_granular, na.rm = TRUE),
     nrow(display_sources),
     nrow(adaptive_summary),
     sum(collapse_qc$review_flag, na.rm = TRUE),
@@ -2705,7 +3029,6 @@ output_dictionary <- tibble(
     "go_id_mapping_qc.csv",
     "unmapped_or_ambiguous_terms.csv",
     "candidate_mapping_failures.csv",
-    "priority_branches_used.csv",
     "go_term_metrics.csv",
     "semantic_cluster_membership.csv",
     "adaptive_display_mapping.csv",
@@ -2722,7 +3045,7 @@ output_dictionary <- tibble(
       "Primary reporting output: one row per unique significant displayed GO",
       "term across the analysis. Exact duplicates and strict is_a/part_of",
       "ancestor-descendant pairs are removed; granular semantic siblings are",
-      "capped globally. Cell populations and directions are aggregated."
+      "capped scope-wide. Cell populations and directions are aggregated."
     ),
     paste(
       "Cell-specific significant GO frontier: one row per cell type and GO",
@@ -2730,7 +3053,7 @@ output_dictionary <- tibble(
       "part_of ancestor pairs. evidence_* columns identify the tested source."
     ),
     paste(
-      "Global ranking within each semantic cluster and direction, showing",
+      "Scope-wide ranking within each semantic cluster and direction, showing",
       "which evidence-supported granular GO terms passed the cluster cap."
     ),
     paste(
@@ -2740,7 +3063,6 @@ output_dictionary <- tibble(
     "Pathway-to-GO-ID mapping and mapping status for every tested pathway.",
     "Terms that need mapping review; no such term enters the summary.",
     "Significant candidate pathways omitted because mapping was not usable.",
-    "Custom fibrosis-priority roots used for this run.",
     "Depth range, IC, evidence, direction and redundancy metrics by GO term.",
     "rrvgo sensitivity clusters and direction-specific representatives.",
     "Auditable member-to-display mapping and the reason for each decision.",
@@ -2767,22 +3089,21 @@ readr::write_csv(
   file.path(config$output_dir, "output_dictionary.csv")
 )
 
-# Plot the highest-priority/evidence display rows while retaining the complete
+# Plot the strongest evidence-supported display rows while retaining the complete
 # table in CSV outputs.
 plot_selection <- adaptive_summary |>
   group_by(
-    display_key, display_go_id, display_term, priority_theme,
+    display_key, display_go_id, display_term,
     direction_stratum, mapping_type
   ) |>
   summarise(
-    is_priority = any(!is.na(priority_theme) & priority_theme != ""),
     best_source_q = safe_min(source_q_value),
     n_source_significant_cell_types = sum(source_significant, na.rm = TRUE),
     .groups = "drop"
   ) |>
   filter(is.finite(best_source_q)) |>
   arrange(
-    desc(is_priority), best_source_q,
+    best_source_q,
     desc(n_source_significant_cell_types)
   ) |>
   slice_head(n = config$max_plot_terms)
@@ -2791,11 +3112,6 @@ plot_label_table <- plot_selection |>
   mutate(
     display_label = paste0(
       display_term, " (", display_go_id, ")",
-      ifelse(
-        is.na(priority_theme) | priority_theme == "",
-        "",
-        paste0(" [", priority_theme, "]")
-      ),
       " {", direction_stratum, "}",
       " <", mapping_type, ">"
     ),
@@ -2893,7 +3209,7 @@ if (nrow(plot_data) > 0) {
 parameter_table <- tibble(
   parameter = c(
     "significant_file", "all_results_file", "profile_source",
-    "go_id_mapping_file", "priority_file", "fdr_column", "fdr_threshold",
+    "go_id_mapping_file", "fdr_column", "fdr_threshold",
     "min_abs_nes", "min_leading_edge_genes",
     "min_leading_edge_fraction", "semantic_method", "semantic_threshold",
     "sensitivity_thresholds", "min_shared_cell_types_for_correlation",
@@ -2902,10 +3218,8 @@ parameter_table <- tibble(
     "min_direction_concordance", "min_leading_edge_jaccard",
     "min_leading_edge_overlap", "min_rollup_depth",
     "target_rollup_depth", "target_rollup_information_content",
-    "default_max_granular_per_cluster",
-    "hard_max_granular_per_cluster",
     "final_granular_fdr", "final_granular_min_abs_nes",
-    "final_granular_min_depth", "final_max_peripheral_per_cluster",
+    "final_granular_min_depth", "final_max_granular_per_cluster",
     "minimum_mapping_fraction",
     "mapping_fraction"
   ),
@@ -2914,7 +3228,6 @@ parameter_table <- tibble(
     ifelse(is.na(config$all_results_file), "NA", config$all_results_file),
     profile_source,
     ifelse(is.na(config$go_id_mapping_file), "NA", config$go_id_mapping_file),
-    ifelse(is.na(config$priority_file), "built_in", config$priority_file),
     config$fdr_column,
     config$fdr_threshold,
     config$min_abs_nes,
@@ -2932,15 +3245,47 @@ parameter_table <- tibble(
     config$min_rollup_depth,
     config$target_rollup_depth,
     config$target_rollup_information_content,
-    config$default_max_granular_per_cluster,
-    config$hard_max_granular_per_cluster,
     config$final_granular_fdr,
     config$final_granular_min_abs_nes,
     config$final_granular_min_depth,
-    config$final_max_peripheral_per_cluster,
+    config$final_max_granular_per_cluster,
     config$minimum_mapping_fraction,
     mapping_fraction
   ))
+)
+
+parameter_table <- bind_rows(
+  parameter_table,
+  tibble(
+    parameter = c(
+      "analysis_scope", "analysis_scope_label", "analysis_scope_type",
+      "scope_completeness", "requested_cell_types", "included_cell_types",
+      "missing_cell_types", "n_requested_cell_types",
+      "n_included_cell_types", "n_missing_cell_types",
+      "n_scope_significant_rows", "n_scope_complete_result_rows",
+      "shared_similarity_cache_file", "semantic_similarity_cache_source"
+    ),
+    value = as.character(c(
+      config$analysis_scope,
+      config$analysis_scope_label,
+      config$analysis_scope_type,
+      config$scope_completeness,
+      collapse_manifest_values(config$requested_cell_types),
+      collapse_manifest_values(config$included_cell_types),
+      collapse_manifest_values(config$missing_cell_types),
+      length(config$requested_cell_types),
+      length(config$included_cell_types),
+      length(config$missing_cell_types),
+      nrow(significant_input),
+      nrow(all_results),
+      ifelse(
+        is.na(config$shared_similarity_cache_file),
+        "NA",
+        config$shared_similarity_cache_file
+      ),
+      ifelse(is.na(cache_source_file), "not_cached", cache_source_file)
+    ))
+  )
 )
 
 readr::write_csv(
@@ -2953,9 +3298,6 @@ input_files <- unique(c(
   if (have_full_results) config$all_results_file else character(),
   if (!is.na(config$go_id_mapping_file) && file.exists(config$go_id_mapping_file)) {
     config$go_id_mapping_file
-  } else character(),
-  if (!is.na(config$priority_file) && file.exists(config$priority_file)) {
-    config$priority_file
   } else character()
 ))
 
@@ -2982,9 +3324,27 @@ writeLines(
   file.path(config$output_dir, "sessionInfo.txt")
 )
 
+write_scope_metadata(
+  status = if (
+    identical(config$scope_completeness, "complete")
+  ) "completed" else "completed_partial",
+  n_candidate_pathways = length(candidate_pathways),
+  n_final_unique_terms = nrow(final_significant_terms),
+  n_final_by_cell_rows = nrow(final_by_cell)
+)
+
 message(
-  "Adaptive GO-BP summary complete: ", config$output_dir,
+  "Adaptive GO-BP summary complete for ", config$analysis_scope_label,
+  ": ", config$output_dir,
   "\nPrimary compact output: adaptive_go_final_significant_terms.csv",
   " (", nrow(final_significant_terms), " unique GO terms)",
-  "\nCell-specific output: adaptive_go_final_by_cell.csv"
+  "\nCell-specific output: adaptive_go_final_by_cell.csv",
+  if (length(config$missing_cell_types) > 0L) {
+    paste0(
+      "\nPartial scope; missing requested populations: ",
+      paste(config$missing_cell_types, collapse = ", ")
+    )
+  } else {
+    ""
+  }
 )
